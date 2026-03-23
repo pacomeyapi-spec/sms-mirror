@@ -64,13 +64,18 @@ class NotificationListener : NotificationListenerService() {
 
         Log.i("NotifListener", "[$appName] $content")
 
+        val notifKey = sbn.key  // capturer avant le lancement de la coroutine
         CoroutineScope(Dispatchers.IO).launch {
             val api = ApiClient(settings)
             api.sendMessages(listOf(payload))
                 .onSuccess {
                     // Supprimer la notification Wave Business après envoi réussi
                     if (appName == "Wave Business") {
-                        cancelNotification(sbn.key)
+                        try {
+                            cancelNotification(notifKey)
+                        } catch (e: Exception) {
+                            Log.w("NotifListener", "Impossible de supprimer la notif: ${e.message}")
+                        }
                     }
                 }
                 .onFailure {
