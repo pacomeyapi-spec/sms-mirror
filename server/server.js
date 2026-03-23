@@ -1,58 +1,56 @@
 /**
- * SMS Mirror — Serveur principal
+ * SMS Mirror – Serveur principal
  * Reçoit les messages/notifications/appels depuis l'app Android
  * et les diffuse en temps réel sur le tableau de bord web.
  */
 
-const express = require('express');
-const http = require('http');
+const express    = require('express');
+const http       = require('http');
 const { Server } = require('socket.io');
-const cors = require('cors');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const path = require('path');
-const Database = require('better-sqlite3');
+const cors       = require('cors');
+const bcrypt     = require('bcryptjs');
+const jwt        = require('jsonwebtoken');
+const path       = require('path');
+const Database   = require('better-sqlite3');
 const { v4: uuidv4 } = require('uuid');
 
-// ─── Configuration ────────────────────────────────────────────────────────────
-const PORT = process.env.PORT || 3000;
-const SECRET_KEY = process.env.SECRET_KEY || 'changez-moi-en-production-' + Math.random().toString(36);
+// ── Configuration ────────────────────────────────────────────────────────────
+const PORT               = process.env.PORT               || 3000;
+const SECRET_KEY         = process.env.SECRET_KEY         || 'changez-moi-' + Math.random().toString(36);
 const DASHBOARD_PASSWORD = process.env.DASHBOARD_PASSWORD || 'admin123';
-const DEVICE_TOKEN = process.env.DEVICE_TOKEN || 'token-android-' + Math.random().toString(36).slice(2, 10);
+const DEVICE_TOKEN       = process.env.DEVICE_TOKEN       || 'token-android-' + Math.random().toString(36).slice(2, 10);
 
-console.log('═══════════════════════════════════════════════');
-console.log('  SMS Mirror — Démarrage du serveur');
-console.log('═══════════════════════════════════════════════');
+console.log('─────────────────────────────────────────────');
+console.log('  SMS Mirror – Démarrage du serveur');
+console.log('─────────────────────────────────────────────');
 console.log(`  Port         : ${PORT}`);
 console.log(`  Device Token : ${DEVICE_TOKEN}`);
-console.log(`  Dashboard    : http://localhost:${PORT}`);
-console.log('  Mot de passe : voir variable DASHBOARD_PASSWORD');
-console.log('═══════════════════════════════════════════════\n');
+console.log('─────────────────────────────────────────────\n');
 
-// ─── Base de données SQLite ───────────────────────────────────────────────────
+// ── Base de données SQLite ───────────────────────────────────────────────────
 const db = new Database('sms_mirror.db');
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS messages (
-    id          TEXT PRIMARY KEY,
-    device_id   TEXT NOT NULL,
-    device_name TEXT,
-    type        TEXT NOT NULL CHECK(type IN ('sms', 'notification', 'call')),
-    sender      TEXT,
-    sender_name TEXT,
-    content     TEXT,
-    app_name    TEXT,
-    app_package TEXT,
-    call_type   TEXT,
+    id            TEXT PRIMARY KEY,
+    device_id     TEXT NOT NULL,
+    device_name   TEXT,
+    type          TEXT NOT NULL CHECK(type IN ('sms','notification','call')),
+    sender        TEXT,
+    sender_name   TEXT,
+    content       TEXT,
+    app_name      TEXT,
+    app_package   TEXT,
+    call_type     TEXT,
     call_duration INTEGER,
-    timestamp   INTEGER NOT NULL,
-    received_at INTEGER NOT NULL,
-    is_read     INTEGER DEFAULT 0
+    timestamp     INTEGER NOT NULL,
+    received_at   INTEGER NOT NULL,
+    is_read       INTEGER DEFAULT 0
   );
 
   CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp DESC);
-  CREATE INDEX IF NOT EXISTS idx_messages_type ON messages(type);
-  CREATE INDEX IF NOT EXISTS idx_messages_device ON messages(device_id);
+  CREATE INDEX IF NOT EXISTS idx_messages_type      ON messages(type);
+  CREATE INDEX IF NOT EXISTS idx_messages_device    ON messages(device_id);
 
   CREATE TABLE IF NOT EXISTS devices (
     id          TEXT PRIMARY KEY,
@@ -61,33 +59,58 @@ db.exec(`
     last_seen   INTEGER,
     token       TEXT
   );
+
+  CREATE TABLE IF NOT EXISTS users (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    username      TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    role          TEXT DEFAULT 'user',
+    created_at    INTEGER DEFAULT (strftime('%s','now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS device_permissions (
+    user_id   INTEGER NOT NULL,
+    device_id TEXT    NOT NULL,
+    PRIMARY KEY (user_id, device_id)
+  );
 `);
 
-// Migration : ajouter la colonne status si elle n'existe pas encore
-try {
-  db.exec("ALTER TABLE messages ADD COLUMN status TEXT DEFAULT NULL");
-  console.log('[DB] Colonne status ajoutée');
-} catch (e) {
-  // Colonne déjà existante, on ignore
+// ── Migrations ───────────────────────────────────────────────────────────────
+try { db.exec("ALTER TABLE messages ADD COLUMN status       TEXT DEFAULT NULL"); } catch(e) {}
+try { db.exec("ALTER TABLE devices  ADD COLUMN number       INTEGER");            } catch(e) {}
+try { db.exec("ALTER TABLE devices  ADD COLUMN display_name TEXT");               } catch(e) {}
+
+// Attribuer un numéro aux appareils qui n'en ont pas encore
+const devicesWithoutNum = db.prepare("SELECT id FROM devices WHERE number IS NULL ORDER BY last_seen ASC").all();
+devicesWithoutNum.forEach(d => {
+  const maxNum = db.prepare("SELECT COALESCE(MAX(number),0) as m FROM devices").get().m;
+  db.prepare("UPDATE devices SET number=? WHERE id=?").run(maxNum + 1, d.id);
+});
+
+// Créer l'utilisateur admin par défaut si inexistant
+const adminExists = db.prepare("SELECT id FROM users WHERE role='admin'").get();
+if (!adminExists) {
+  const hash = bcrypt.hashSync(DASHBOARD_PASSWORD, 10);
+  db.prepare("INSERT OR IGNORE INTO users (username,password_hash,role) VALUES ('admin',?,'admin')").run(hash);
+  console.log('[Auth] Compte admin créé avec le mot de passe DASHBOARD_PASSWORD');
 }
 
-// ─── Application Express ──────────────────────────────────────────────────────
-const app = express();
+// ── Express + Socket.io ──────────────────────────────────────────────────────
+const app    = express();
 const server = http.createServer(app);
-const io = new Server(server, {
-  cors: { origin: '*', methods: ['GET', 'POST', 'PATCH'] }
+const io     = new Server(server, {
+  cors: { origin: '*', methods: ['GET','POST','PATCH','DELETE','PUT'] }
 });
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// ─── Middleware Auth JWT (pour dashboard) ──────────────────────────────────────
+// ── Middlewares Auth ─────────────────────────────────────────────────────────
 function requireDashboardAuth(req, res, next) {
   const auth = req.headers.authorization;
-  if (!auth || !auth.startsWith('Bearer ')) {
+  if (!auth || !auth.startsWith('Bearer '))
     return res.status(401).json({ error: 'Non authentifié' });
-  }
   try {
     req.user = jwt.verify(auth.slice(7), SECRET_KEY);
     next();
@@ -96,202 +119,281 @@ function requireDashboardAuth(req, res, next) {
   }
 }
 
-// ─── Middleware Auth Device (pour l'app Android) ──────────────────────────────
-function requireDeviceAuth(req, res, next) {
-  const token = req.headers['x-device-token'];
-  if (!token || token !== DEVICE_TOKEN) {
-    return res.status(403).json({ error: 'Token appareil invalide' });
-  }
+function requireAdmin(req, res, next) {
+  if (req.user.role !== 'admin')
+    return res.status(403).json({ error: 'Accès admin requis' });
   next();
 }
 
-// ─── Routes API ───────────────────────────────────────────────────────────────
+function requireDeviceAuth(req, res, next) {
+  const token = req.headers['x-device-token'];
+  if (!token || token !== DEVICE_TOKEN)
+    return res.status(403).json({ error: 'Token appareil invalide' });
+  next();
+}
 
-// POST /api/login — Connexion au dashboard
+// ── Helpers ──────────────────────────────────────────────────────────────────
+// Retourne null pour admin (= tous les appareils), ou tableau d'IDs pour user
+function getUserDevices(user) {
+  if (user.role === 'admin') return null;
+  return db.prepare("SELECT device_id FROM device_permissions WHERE user_id=?")
+           .all(user.id).map(p => p.device_id);
+}
+
+// Ajoute un filtre device_id IN (...) à une requête named-params
+function addDeviceFilter(query, params, allowed) {
+  if (allowed === null) return { query, params };
+  if (allowed.length === 0) return { query: query + ' AND 1=0', params };
+  const dp = {};
+  const ph = allowed.map((d, i) => { dp[`_dv${i}`] = d; return `@_dv${i}`; });
+  return { query: query + ` AND device_id IN (${ph.join(',')})`, params: { ...params, ...dp } };
+}
+
+// ── Routes : Authentification ────────────────────────────────────────────────
 app.post('/api/login', (req, res) => {
-  const { password } = req.body;
-  if (!password || password !== DASHBOARD_PASSWORD) {
-    return res.status(401).json({ error: 'Mot de passe incorrect' });
-  }
-  const token = jwt.sign({ role: 'dashboard' }, SECRET_KEY, { expiresIn: '30d' });
-  res.json({ token });
+  const { username, password } = req.body;
+  if (!password) return res.status(401).json({ error: 'Mot de passe requis' });
+
+  const loginUsername = (username || 'admin').trim();
+  const user = db.prepare("SELECT * FROM users WHERE username=?").get(loginUsername);
+
+  if (!user || !bcrypt.compareSync(password, user.password_hash))
+    return res.status(401).json({ error: 'Identifiants incorrects' });
+
+  const token = jwt.sign(
+    { id: user.id, username: user.username, role: user.role },
+    SECRET_KEY, { expiresIn: '30d' }
+  );
+  res.json({ token, role: user.role, username: user.username });
 });
 
-// POST /api/device/register — Enregistrer un appareil Android
+// ── Routes : Appareils Android ───────────────────────────────────────────────
 app.post('/api/device/register', requireDeviceAuth, (req, res) => {
   const { device_id, name, platform } = req.body;
   if (!device_id) return res.status(400).json({ error: 'device_id requis' });
 
-  db.prepare(`
-    INSERT INTO devices (id, name, platform, last_seen, token)
-    VALUES (@id, @name, @platform, @last_seen, @token)
-    ON CONFLICT(id) DO UPDATE SET name=@name, platform=@platform, last_seen=@last_seen
-  `).run({ id: device_id, name: name || 'Android', platform: platform || 'android',
-           last_seen: Date.now(), token: DEVICE_TOKEN });
+  const existing = db.prepare("SELECT id FROM devices WHERE id=?").get(device_id);
+  if (!existing) {
+    const maxNum = db.prepare("SELECT COALESCE(MAX(number),0) as m FROM devices").get().m;
+    const num    = maxNum + 1;
+    db.prepare(`
+      INSERT INTO devices (id,name,display_name,platform,last_seen,token,number)
+      VALUES (@id,@name,@dn,@platform,@ts,@tok,@num)
+    `).run({
+      id: device_id,
+      name: name || 'Android',
+      dn: name || ('Appareil ' + num),
+      platform: platform || 'android',
+      ts: Date.now(),
+      tok: DEVICE_TOKEN,
+      num
+    });
+  } else {
+    db.prepare("UPDATE devices SET name=@name,platform=@platform,last_seen=@ts WHERE id=@id")
+      .run({ id: device_id, name: name||'Android', platform: platform||'android', ts: Date.now() });
+  }
 
   io.emit('device_connected', { device_id, name, platform });
-  console.log(`[Appareil] ${name || device_id} connecté (${platform})`);
-  res.json({ ok: true, message: 'Appareil enregistré' });
+  console.log(`[Appareil] ${name||device_id} connecté (${platform||'?'})`);
+  res.json({ ok: true });
 });
 
-// POST /api/messages — Envoyer des messages depuis l'app
 app.post('/api/messages', requireDeviceAuth, (req, res) => {
   const messages = Array.isArray(req.body) ? req.body : [req.body];
   const inserted = [];
 
   const insert = db.prepare(`
     INSERT OR IGNORE INTO messages
-      (id, device_id, device_name, type, sender, sender_name, content,
-       app_name, app_package, call_type, call_duration, timestamp, received_at)
+      (id,device_id,device_name,type,sender,sender_name,content,
+       app_name,app_package,call_type,call_duration,timestamp,received_at)
     VALUES
-      (@id, @device_id, @device_name, @type, @sender, @sender_name, @content,
-       @app_name, @app_package, @call_type, @call_duration, @timestamp, @received_at)
+      (@id,@device_id,@device_name,@type,@sender,@sender_name,@content,
+       @app_name,@app_package,@call_type,@call_duration,@timestamp,@received_at)
   `);
+  const updateDev = db.prepare("UPDATE devices SET last_seen=@ts WHERE id=@id");
 
-  const updateDevice = db.prepare(`
-    UPDATE devices SET last_seen=@ts WHERE id=@id
-  `);
-
-  const insertMany = db.transaction((msgs) => {
+  db.transaction((msgs) => {
     for (const msg of msgs) {
       const row = {
-        id:            msg.id || uuidv4(),
-        device_id:     msg.device_id || 'unknown',
-        device_name:   msg.device_name || null,
-        type:          msg.type || 'sms',
-        sender:        msg.sender || null,
-        sender_name:   msg.sender_name || null,
-        content:       msg.content || null,
-        app_name:      msg.app_name || null,
-        app_package:   msg.app_package || null,
-        call_type:     msg.call_type || null,
+        id:            msg.id            || uuidv4(),
+        device_id:     msg.device_id     || 'unknown',
+        device_name:   msg.device_name   || null,
+        type:          msg.type          || 'sms',
+        sender:        msg.sender        || null,
+        sender_name:   msg.sender_name   || null,
+        content:       msg.content       || null,
+        app_name:      msg.app_name      || null,
+        app_package:   msg.app_package   || null,
+        call_type:     msg.call_type     || null,
         call_duration: msg.call_duration || null,
-        timestamp:     msg.timestamp || Date.now(),
+        timestamp:     msg.timestamp     || Date.now(),
         received_at:   Date.now(),
       };
-      const result = insert.run(row);
-      if (result.changes > 0) {
+      if (insert.run(row).changes > 0) {
         inserted.push(row);
-        console.log(`[${row.type.toUpperCase()}] ${row.sender_name || row.sender} → "${(row.content || '').slice(0, 50)}"`);
+        console.log(`[${row.type.toUpperCase()}] ${row.sender_name||row.sender} → "${(row.content||'').slice(0,60)}"`);
       }
-      updateDevice.run({ ts: Date.now(), id: row.device_id });
+      updateDev.run({ ts: Date.now(), id: row.device_id });
     }
-  });
+  })(messages);
 
-  insertMany(messages);
-
-  if (inserted.length > 0) {
-    io.emit('new_messages', inserted);
-  }
-
+  if (inserted.length > 0) io.emit('new_messages', inserted);
   res.json({ ok: true, inserted: inserted.length });
 });
 
-// GET /api/messages — Récupérer les messages (dashboard)
+// ── Routes : Messages (dashboard) ───────────────────────────────────────────
 app.get('/api/messages', requireDashboardAuth, (req, res) => {
-  const { type, device_id, search, sender, limit = 200, offset = 0 } = req.query;
+  const { type, device_id, search, sender, limit=200, offset=0 } = req.query;
+  const allowed = getUserDevices(req.user);
 
-  let query = 'SELECT * FROM messages WHERE 1=1';
-  const params = {};
+  let query  = 'SELECT * FROM messages WHERE 1=1';
+  let params = {};
+  ({ query, params } = addDeviceFilter(query, params, allowed));
 
-  if (type)      { query += ' AND type=@type';           params.type = type; }
-  if (device_id) { query += ' AND device_id=@device_id'; params.device_id = device_id; }
-  if (sender)    { query += ' AND (sender=@sender OR sender_name=@sender OR app_name=@sender)'; params.sender = sender; }
-  if (search)    {
-    query += ' AND (content LIKE @s OR sender LIKE @s OR sender_name LIKE @s OR app_name LIKE @s)';
-    params.s = `%${search}%`;
-  }
+  if (type)      { query += ' AND type=@type';       params.type = type; }
+  if (device_id) { query += ' AND device_id=@did';   params.did  = device_id; }
+  if (sender)    { query += ' AND (sender=@sndr OR sender_name=@sndr OR app_name=@sndr)'; params.sndr = sender; }
+  if (search)    { query += ' AND (content LIKE @srch OR sender LIKE @srch OR sender_name LIKE @srch OR app_name LIKE @srch)'; params.srch = `%${search}%`; }
 
-  query += ' ORDER BY timestamp DESC LIMIT @limit OFFSET @offset';
-  params.limit = parseInt(limit);
-  params.offset = parseInt(offset);
+  query += ' ORDER BY timestamp DESC LIMIT @lim OFFSET @off';
+  params.lim = parseInt(limit);
+  params.off = parseInt(offset);
 
   const messages = db.prepare(query).all(params);
-  const total = db.prepare(
-    query.replace('SELECT *', 'SELECT COUNT(*) as cnt').replace('ORDER BY timestamp DESC LIMIT @limit OFFSET @offset', '')
-  ).get(params)?.cnt || 0;
-
-  res.json({ messages, total });
+  res.json({ messages, total: messages.length });
 });
 
-// GET /api/senders — Liste des expéditeurs uniques avec comptage
 app.get('/api/senders', requireDashboardAuth, (req, res) => {
-  const senders = db.prepare(`
-    SELECT
-      COALESCE(sender_name, sender, app_name, 'Inconnu') as display_name,
-      sender, sender_name, app_name, type,
-      COUNT(*) as count,
-      SUM(CASE WHEN is_read=0 THEN 1 ELSE 0 END) as unread,
-      MAX(timestamp) as last_ts
-    FROM messages
-    GROUP BY COALESCE(sender_name, sender, app_name, 'Inconnu')
-    ORDER BY last_ts DESC
-  `).all();
-  res.json(senders);
+  const allowed = getUserDevices(req.user);
+  let query  = `SELECT COALESCE(sender_name,sender,app_name,'Inconnu') as display_name,
+    sender, sender_name, app_name, type,
+    COUNT(*) as count,
+    SUM(CASE WHEN is_read=0 THEN 1 ELSE 0 END) as unread,
+    MAX(timestamp) as last_ts
+    FROM messages WHERE 1=1`;
+  let params = {};
+  ({ query, params } = addDeviceFilter(query, params, allowed));
+  query += ` GROUP BY COALESCE(sender_name,sender,app_name,'Inconnu') ORDER BY last_ts DESC`;
+  res.json(db.prepare(query).all(params));
 });
 
-// PATCH /api/messages/:id/status — Mettre à jour le statut d'un message
 app.patch('/api/messages/:id/status', requireDashboardAuth, (req, res) => {
   const { status } = req.body;
-  const validStatuses = ['approuve', 'pas_de_commande', null];
-  if (!validStatuses.includes(status)) {
-    return res.status(400).json({ error: 'Statut invalide. Valeurs acceptées : approuve, pas_de_commande, null' });
-  }
+  if (!['approuve','pas_de_commande',null].includes(status))
+    return res.status(400).json({ error: 'Statut invalide' });
   const result = db.prepare('UPDATE messages SET status=? WHERE id=?').run(status, req.params.id);
-  if (result.changes === 0) {
-    return res.status(404).json({ error: 'Message non trouvé' });
-  }
+  if (result.changes === 0) return res.status(404).json({ error: 'Message non trouvé' });
   io.emit('message_status_updated', { id: req.params.id, status });
   res.json({ ok: true, id: req.params.id, status });
 });
 
-// GET /api/stats — Statistiques pour le dashboard
 app.get('/api/stats', requireDashboardAuth, (req, res) => {
+  const allowed = getUserDevices(req.user);
+  let base   = 'FROM messages WHERE 1=1';
+  let params = {};
+  ({ query: base, params } = addDeviceFilter(base, params, allowed));
+
   const stats = {
-    total:         db.prepare('SELECT COUNT(*) as c FROM messages').get().c,
-    sms:           db.prepare("SELECT COUNT(*) as c FROM messages WHERE type='sms'").get().c,
-    notifications: db.prepare("SELECT COUNT(*) as c FROM messages WHERE type='notification'").get().c,
-    calls:         db.prepare("SELECT COUNT(*) as c FROM messages WHERE type='call'").get().c,
-    unread:        db.prepare('SELECT COUNT(*) as c FROM messages WHERE is_read=0').get().c,
-    devices:       db.prepare('SELECT * FROM devices ORDER BY last_seen DESC').all(),
+    total:         db.prepare(`SELECT COUNT(*) as c ${base}`).get(params).c,
+    sms:           db.prepare(`SELECT COUNT(*) as c ${base} AND type='sms'`).get(params).c,
+    notifications: db.prepare(`SELECT COUNT(*) as c ${base} AND type='notification'`).get(params).c,
+    calls:         db.prepare(`SELECT COUNT(*) as c ${base} AND type='call'`).get(params).c,
+    unread:        db.prepare(`SELECT COUNT(*) as c ${base} AND is_read=0`).get(params).c,
+    devices: req.user.role === 'admin'
+      ? db.prepare('SELECT * FROM devices ORDER BY number ASC').all()
+      : [],
   };
   res.json(stats);
 });
 
-// POST /api/messages/read — Marquer comme lus
 app.post('/api/messages/read', requireDashboardAuth, (req, res) => {
   const { ids } = req.body;
   if (!ids || !ids.length) {
     db.prepare('UPDATE messages SET is_read=1').run();
   } else {
-    const mark = db.prepare('UPDATE messages SET is_read=1 WHERE id=?');
-    ids.forEach(id => mark.run(id));
+    const s = db.prepare('UPDATE messages SET is_read=1 WHERE id=?');
+    ids.forEach(id => s.run(id));
   }
   io.emit('messages_read', { ids });
   res.json({ ok: true });
 });
 
-// GET /api/config — Infos de configuration pour l'app Android
 app.get('/api/config', requireDeviceAuth, (req, res) => {
-  res.json({
-    version: '1.0.0',
-    server_time: Date.now(),
-    sync_interval: 30000,
-  });
+  res.json({ version: '1.0.0', server_time: Date.now(), sync_interval: 30000 });
 });
 
-// ─── WebSocket ────────────────────────────────────────────────────────────────
+// ── Routes : Admin – Utilisateurs ───────────────────────────────────────────
+app.get('/api/admin/users', requireDashboardAuth, requireAdmin, (req, res) => {
+  const users    = db.prepare("SELECT id,username,role,created_at FROM users ORDER BY created_at ASC").all();
+  const permsStmt= db.prepare("SELECT device_id FROM device_permissions WHERE user_id=?");
+  res.json(users.map(u => ({ ...u, device_ids: permsStmt.all(u.id).map(p => p.device_id) })));
+});
+
+app.post('/api/admin/users', requireDashboardAuth, requireAdmin, (req, res) => {
+  const { username, password, role='user' } = req.body;
+  if (!username || !password) return res.status(400).json({ error: 'username et password requis' });
+  if (!['user','admin'].includes(role)) return res.status(400).json({ error: 'Rôle invalide' });
+  try {
+    const r = db.prepare("INSERT INTO users (username,password_hash,role) VALUES (?,?,?)")
+                .run(username.trim(), bcrypt.hashSync(password, 10), role);
+    res.json({ ok: true, id: r.lastInsertRowid, username: username.trim(), role });
+  } catch(e) {
+    if (e.message.includes('UNIQUE')) return res.status(409).json({ error: "Nom d'utilisateur déjà pris" });
+    throw e;
+  }
+});
+
+app.delete('/api/admin/users/:id', requireDashboardAuth, requireAdmin, (req, res) => {
+  const uid = parseInt(req.params.id);
+  if (uid === req.user.id) return res.status(400).json({ error: 'Impossible de supprimer votre propre compte' });
+  db.prepare("DELETE FROM device_permissions WHERE user_id=?").run(uid);
+  db.prepare("DELETE FROM users WHERE id=?").run(uid);
+  res.json({ ok: true });
+});
+
+app.put('/api/admin/users/:id/password', requireDashboardAuth, requireAdmin, (req, res) => {
+  const { password } = req.body;
+  if (!password) return res.status(400).json({ error: 'Mot de passe requis' });
+  db.prepare("UPDATE users SET password_hash=? WHERE id=?")
+    .run(bcrypt.hashSync(password, 10), parseInt(req.params.id));
+  res.json({ ok: true });
+});
+
+app.put('/api/admin/users/:id/permissions', requireDashboardAuth, requireAdmin, (req, res) => {
+  const uid = parseInt(req.params.id);
+  const { device_ids } = req.body;
+  if (!Array.isArray(device_ids)) return res.status(400).json({ error: 'device_ids doit être un tableau' });
+  db.prepare("DELETE FROM device_permissions WHERE user_id=?").run(uid);
+  const ins = db.prepare("INSERT OR IGNORE INTO device_permissions (user_id,device_id) VALUES (?,?)");
+  db.transaction(ids => ids.forEach(did => ins.run(uid, did)))(device_ids);
+  res.json({ ok: true });
+});
+
+// ── Routes : Admin – Appareils ───────────────────────────────────────────────
+app.get('/api/admin/devices', requireDashboardAuth, requireAdmin, (req, res) => {
+  res.json(db.prepare("SELECT * FROM devices ORDER BY number ASC, last_seen DESC").all());
+});
+
+app.put('/api/admin/devices/:id', requireDashboardAuth, requireAdmin, (req, res) => {
+  const { display_name, number } = req.body;
+  const updates = [];
+  const params  = { id: req.params.id };
+  if (display_name !== undefined) { updates.push('display_name=@display_name'); params.display_name = display_name; }
+  if (number       !== undefined) { updates.push('number=@number');             params.number       = number;       }
+  if (updates.length)
+    db.prepare(`UPDATE devices SET ${updates.join(',')} WHERE id=@id`).run(params);
+  res.json({ ok: true });
+});
+
+// ── WebSocket ────────────────────────────────────────────────────────────────
 io.on('connection', (socket) => {
   console.log(`[WebSocket] Dashboard connecté (${socket.id})`);
-
-  socket.on('disconnect', () => {
-    console.log(`[WebSocket] Dashboard déconnecté (${socket.id})`);
-  });
+  socket.on('disconnect', () => console.log(`[WebSocket] Dashboard déconnecté (${socket.id})`));
 });
 
-// ─── Démarrage ────────────────────────────────────────────────────────────────
+// ── Démarrage ────────────────────────────────────────────────────────────────
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`\n✅ Serveur démarré sur le port ${PORT}`);
-  console.log(`📱 Token Android : ${DEVICE_TOKEN}`);
-  console.log(`🔒 Mot de passe dashboard : ${DASHBOARD_PASSWORD}\n`);
+  console.log(`\n✓ Serveur démarré sur le port ${PORT}`);
+  console.log(`📱 Token Android  : ${DEVICE_TOKEN}`);
+  console.log(`🔐 Mot de passe   : ${DASHBOARD_PASSWORD}\n`);
 });
