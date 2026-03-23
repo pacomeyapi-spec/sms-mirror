@@ -13,7 +13,7 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="📱 SMS Mirror"
+            android:text="ð± SMS Mirror"
             android:textSize="24sp"
             android:textStyle="bold"
             android:textColor="#E2E8F0"
@@ -62,6 +62,32 @@
             android:text="Enregistrer"
             android:backgroundTint="#4F8EF7"
             android:textColor="@android:color/white" />
+        
+        <TextView
+            android:id="@+id/tvPermSms"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="SMS : ..."
+            android:textColor="#94A3B8"
+            android:textSize="13sp"
+            android:layout_marginTop="12dp" />
+        <TextView
+            android:id="@+id/tvPermCall"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Appels : ..."
+            android:textColor="#94A3B8"
+            android:textSize="13sp"
+            android:layout_marginTop="4dp" />
+        <TextView
+            android:id="@+id/tvPermNotif"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Notifications : ..."
+            android:textColor="#94A3B8"
+            android:textSize="13sp"
+            android:layout_marginTop="4dp"
+            android:layout_marginBottom="12dp" />
         <Button
             android:id="@+id/btnPermissions"
             android:layout_width="match_parent"
@@ -69,18 +95,36 @@
             android:text="Accorder les permissions"
             android:backgroundTint="#7C3AED"
             android:textColor="@android:color/white" />
+        
+        <TextView
+            android:id="@+id/tvStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Statut : inactif"
+            android:textColor="#94A3B8"
+            android:textSize="13sp"
+            android:layout_marginTop="10dp" />
+        <TextView
+            android:id="@+id/tvSyncInfo"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Sync : --"
+            android:textColor="#64748B"
+            android:textSize="12sp"
+            android:layout_marginTop="4dp"
+            android:layout_marginBottom="10dp" />
         <Button
             android:id="@+id/btnStart"
             android:layout_width="match_parent"
             android:layout_height="48dp"
-            android:text="Démarrer"
+            android:text="DÃ©marrer"
             android:backgroundTint="#22C55E"
             android:textColor="@android:color/white" />
         <Button
             android:id="@+id/btnStop"
             android:layout_width="match_parent"
             android:layout_height="48dp"
-            android:text="Arrêter"
+            android:text="ArrÃªter"
             android:backgroundTint="#EF4444"
             android:textColor="@android:color/white" />
         <Button
