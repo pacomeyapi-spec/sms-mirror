@@ -63,11 +63,19 @@ db.exec(`
   );
 `);
 
+// Migration : ajouter la colonne status si elle n'existe pas encore
+try {
+  db.exec("ALTER TABLE messages ADD COLUMN status TEXT DEFAULT NULL");
+  console.log('[DB] Colonne status ajoutée');
+} catch (e) {
+  // Colonne déjà existante, on ignore
+}
+
 // ─── Application Express ──────────────────────────────────────────────────────
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
-  cors: { origin: '*', methods: ['GET', 'POST'] }
+  cors: { origin: '*', methods: ['GET', 'POST', 'PATCH'] }
 });
 
 app.use(cors());
@@ -140,7 +148,6 @@ app.post('/api/messages', requireDeviceAuth, (req, res) => {
        @app_name, @app_package, @call_type, @call_duration, @timestamp, @received_at)
   `);
 
-  // Mettre à jour le last_seen de l'appareil
   const updateDevice = db.prepare(`
     UPDATE devices SET last_seen=@ts WHERE id=@id
   `);
@@ -173,7 +180,6 @@ app.post('/api/messages', requireDeviceAuth, (req, res) => {
 
   insertMany(messages);
 
-  // Émettre en temps réel vers le dashboard
   if (inserted.length > 0) {
     io.emit('new_messages', inserted);
   }
@@ -183,13 +189,14 @@ app.post('/api/messages', requireDeviceAuth, (req, res) => {
 
 // GET /api/messages — Récupérer les messages (dashboard)
 app.get('/api/messages', requireDashboardAuth, (req, res) => {
-  const { type, device_id, search, limit = 200, offset = 0 } = req.query;
+  const { type, device_id, search, sender, limit = 200, offset = 0 } = req.query;
 
   let query = 'SELECT * FROM messages WHERE 1=1';
   const params = {};
 
   if (type)      { query += ' AND type=@type';           params.type = type; }
   if (device_id) { query += ' AND device_id=@device_id'; params.device_id = device_id; }
+  if (sender)    { query += ' AND (sender=@sender OR sender_name=@sender OR app_name=@sender)'; params.sender = sender; }
   if (search)    {
     query += ' AND (content LIKE @s OR sender LIKE @s OR sender_name LIKE @s OR app_name LIKE @s)';
     params.s = `%${search}%`;
@@ -205,6 +212,37 @@ app.get('/api/messages', requireDashboardAuth, (req, res) => {
   ).get(params)?.cnt || 0;
 
   res.json({ messages, total });
+});
+
+// GET /api/senders — Liste des expéditeurs uniques avec comptage
+app.get('/api/senders', requireDashboardAuth, (req, res) => {
+  const senders = db.prepare(`
+    SELECT
+      COALESCE(sender_name, sender, app_name, 'Inconnu') as display_name,
+      sender, sender_name, app_name, type,
+      COUNT(*) as count,
+      SUM(CASE WHEN is_read=0 THEN 1 ELSE 0 END) as unread,
+      MAX(timestamp) as last_ts
+    FROM messages
+    GROUP BY COALESCE(sender_name, sender, app_name, 'Inconnu')
+    ORDER BY last_ts DESC
+  `).all();
+  res.json(senders);
+});
+
+// PATCH /api/messages/:id/status — Mettre à jour le statut d'un message
+app.patch('/api/messages/:id/status', requireDashboardAuth, (req, res) => {
+  const { status } = req.body;
+  const validStatuses = ['approuve', 'pas_de_commande', null];
+  if (!validStatuses.includes(status)) {
+    return res.status(400).json({ error: 'Statut invalide. Valeurs acceptées : approuve, pas_de_commande, null' });
+  }
+  const result = db.prepare('UPDATE messages SET status=? WHERE id=?').run(status, req.params.id);
+  if (result.changes === 0) {
+    return res.status(404).json({ error: 'Message non trouvé' });
+  }
+  io.emit('message_status_updated', { id: req.params.id, status });
+  res.json({ ok: true, id: req.params.id, status });
 });
 
 // GET /api/stats — Statistiques pour le dashboard
@@ -238,7 +276,7 @@ app.get('/api/config', requireDeviceAuth, (req, res) => {
   res.json({
     version: '1.0.0',
     server_time: Date.now(),
-    sync_interval: 30000, // toutes les 30 secondes
+    sync_interval: 30000,
   });
 });
 
