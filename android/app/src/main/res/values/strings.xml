@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">SMS Mirror</string>
+    <string name="channel_name">SMS Mirror — Synchronisation</string>
+    <string name="channel_desc">Service de synchronisation en arrière-plan</string>
+    <string name="notif_title">SMS Mirror actif</string>
+    <string name="notif_text">Synchronisation des messages en cours…</string>
+</resources>
