@@ -10,11 +10,11 @@ import java.util.UUID
 
 /**
  * Capture toutes les notifications de l'appareil et les envoie au serveur.
- * Nécessite l'accès aux notifications dans les paramètres système.
+ * NÃ©cessite l'accÃ¨s aux notifications dans les paramÃ¨tres systÃ¨me.
  */
 class NotificationListener : NotificationListenerService() {
 
-    // Apps à ignorer (éviter les boucles et les notifs inutiles)
+    // Apps Ã  ignorer (Ã©viter les boucles et les notifs inutiles)
     private val IGNORED_PACKAGES = setOf(
         "com.smsmirror.app",
         "android",
@@ -66,8 +66,15 @@ class NotificationListener : NotificationListenerService() {
 
         CoroutineScope(Dispatchers.IO).launch {
             val api = ApiClient(settings)
-            api.sendMessages(listOf(payload)).onFailure {
-                Log.e("NotifListener", "Échec: ${it.message}")
+            api.sendMessages(listOf(payload))
+                .onSuccess {
+                    // Supprimer la notification Wave Business après envoi réussi
+                    if (appName == "Wave Business") {
+                        cancelNotification(sbn.key)
+                    }
+                }
+                .onFailure {
+                Log.e("NotifListener", "Ãchec: ${it.message}")
                 PendingQueue.add(applicationContext, payload)
             }
         }
