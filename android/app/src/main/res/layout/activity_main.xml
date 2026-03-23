@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#0F1117"
+    android:fillViewport="true">
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp">
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="📱 SMS Mirror"
+            android:textSize="24sp"
+            android:textStyle="bold"
+            android:textColor="#E2E8F0"
+            android:layout_marginTop="24dp"
+            android:layout_marginBottom="24dp" />
+        <EditText
+            android:id="@+id/etServerUrl"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="https://votre-serveur.railway.app"
+            android:inputType="textUri"
+            android:textColor="#E2E8F0"
+            android:textColorHint="#4A5568"
+            android:background="@drawable/input_bg"
+            android:padding="12dp"
+            android:textSize="14sp"
+            android:layout_marginBottom="14dp" />
+        <EditText
+            android:id="@+id/etToken"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="token-android-xxxx"
+            android:inputType="text"
+            android:textColor="#E2E8F0"
+            android:textColorHint="#4A5568"
+            android:background="@drawable/input_bg"
+            android:padding="12dp"
+            android:textSize="14sp"
+            android:layout_marginBottom="14dp" />
+        <EditText
+            android:id="@+id/etDeviceName"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Mon Android"
+            android:inputType="text"
+            android:textColor="#E2E8F0"
+            android:textColorHint="#4A5568"
+            android:background="@drawable/input_bg"
+            android:padding="12dp"
+            android:textSize="14sp"
+            android:layout_marginBottom="16dp" />
+        <Button
+            android:id="@+id/btnSave"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:text="Enregistrer"
+            android:backgroundTint="#4F8EF7"
+            android:textColor="@android:color/white" />
+        <Button
+            android:id="@+id/btnPermissions"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:text="Accorder les permissions"
+            android:backgroundTint="#7C3AED"
+            android:textColor="@android:color/white" />
+        <Button
+            android:id="@+id/btnStart"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:text="Démarrer"
+            android:backgroundTint="#22C55E"
+            android:textColor="@android:color/white" />
+        <Button
+            android:id="@+id/btnStop"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:text="Arrêter"
+            android:backgroundTint="#EF4444"
+            android:textColor="@android:color/white" />
+        <Button
+            android:id="@+id/btnTest"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:text="Tester la connexion"
+            android:backgroundTint="#22263A"
+            android:textColor="#94A3B8" />
+        <TextView
+            android:id="@+id/tvLog"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="En attente..."
+            android:textColor="#64748B"
+            android:textSize="12sp"
+            android:fontFamily="monospace" />
+    </LinearLayout>
+</ScrollView>
