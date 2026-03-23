@@ -120,16 +120,24 @@ class MainActivity : AppCompatActivity() {
         if (!isNotificationAccessEnabled()) {
             log("ℹ️ Activation de l'accès aux notifications requise")
             Toast.makeText(this, "Activez 'SMS Mirror' dans Accès aux notifications", Toast.LENGTH_LONG).show()
-            startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+            try {
+                startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+            } catch (e: Exception) {
+                Log.e("MainActivity", "Impossible d'ouvrir les paramètres notifications: ${e.message}")
+            }
         }
 
         // Ignorer optimisations batterie
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             val pm = getSystemService(android.os.PowerManager::class.java)
             if (!pm.isIgnoringBatteryOptimizations(packageName)) {
-                startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                    data = android.net.Uri.parse("package:$packageName")
-                })
+                try {
+                    startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                        data = android.net.Uri.parse("package:$packageName")
+                    })
+                } catch (e: Exception) {
+                    Log.e("MainActivity", "Optimisation batterie non supportée: ${e.message}")
+                }
             }
         }
     }
