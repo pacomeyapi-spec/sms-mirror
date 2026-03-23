@@ -105,6 +105,7 @@ const io     = new Server(server, {
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
+app.get('/admin', (req, res) => res.sendFile('index.html', { root: path.join(__dirname, 'public') }));
 
 // ── Middlewares Auth ─────────────────────────────────────────────────────────
 function requireDashboardAuth(req, res, next) {
