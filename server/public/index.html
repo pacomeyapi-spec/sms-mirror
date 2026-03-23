@@ -360,6 +360,10 @@ function showDashboard() {
   }
   initSocket();
   loadSenders();
+  // Auto-switch to admin panel if URL is /admin
+  if(window.location.pathname === '/admin' && userRole === 'admin') {
+    setTimeout(() => switchView('admin'), 100);
+  }
 }
 
 // ── Sidebar ──────────────────────────────────────────────────────────────────
