@@ -75,12 +75,24 @@ class SyncService : Service() {
     private fun startSyncLoop() {
         syncJob?.cancel()
         syncJob = scope.launch {
-            // Première sync immédiate
-            performFullSync()
+            try {
+                // Première sync immédiate
+                performFullSync()
+            } catch (e: SecurityException) {
+                Log.e("SyncService", "Permission refusée lors de la sync initiale: ${e.message}")
+            } catch (e: Exception) {
+                Log.e("SyncService", "Erreur sync initiale: ${e.message}")
+            }
 
             while (isActive) {
                 delay(30_000L)  // toutes les 30 secondes
-                performSync()
+                try {
+                    performSync()
+                } catch (e: SecurityException) {
+                    Log.e("SyncService", "Permission refusée lors de la sync: ${e.message}")
+                } catch (e: Exception) {
+                    Log.e("SyncService", "Erreur sync périodique: ${e.message}")
+                }
             }
         }
     }
