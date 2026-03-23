@@ -1,406 +1,701 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>SMS Mirror</title>
 <script src="/socket.io/socket.io.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f0f2f5;height:100vh;display:flex;flex-direction:column}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f0f2f5;color:#333}
 
-/* LOGIN */
-#loginScreen{display:flex;align-items:center;justify-content:center;height:100vh;background:#1565C0}
-.login-card{background:#fff;border-radius:12px;padding:40px;width:340px;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,.2)}
-.login-card h1{color:#1565C0;font-size:24px;margin-bottom:8px}
-.login-card p{color:#666;margin-bottom:24px;font-size:14px}
-.login-card input{width:100%;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:15px;margin-bottom:14px;outline:none}
+/* ── Login ─────────────────────────────────────────────────────────────── */
+#login-view{display:flex;align-items:center;justify-content:center;min-height:100vh;background:#1565C0}
+.login-card{background:#fff;border-radius:16px;padding:40px 48px;width:380px;box-shadow:0 8px 32px rgba(0,0,0,.2);text-align:center}
+.login-card h1{color:#1565C0;font-size:1.5rem;margin-bottom:4px}
+.login-card p{color:#888;font-size:.85rem;margin-bottom:28px}
+.login-card input{width:100%;padding:12px 14px;border:1.5px solid #ddd;border-radius:8px;font-size:.95rem;outline:none;margin-bottom:12px;transition:border .2s}
 .login-card input:focus{border-color:#1565C0}
-.login-card button{width:100%;padding:12px;background:#1565C0;color:#fff;border:none;border-radius:8px;font-size:15px;cursor:pointer;font-weight:600}
+.login-card button{width:100%;padding:12px;background:#1565C0;color:#fff;border:none;border-radius:8px;font-size:1rem;font-weight:600;cursor:pointer;transition:background .2s}
 .login-card button:hover{background:#0d47a1}
-.login-error{color:#e53e3e;font-size:13px;margin-top:8px}
+#login-error{color:#e53935;font-size:.85rem;margin-top:8px;min-height:20px}
 
-/* HEADER */
-#appHeader{background:#1565C0;color:#fff;padding:0 20px;height:56px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
-#appHeader h1{font-size:20px;font-weight:700}
-#appHeader .header-right{display:flex;align-items:center;gap:12px}
-#appHeader .badge-total{background:rgba(255,255,255,.2);padding:4px 10px;border-radius:12px;font-size:13px}
-#logoutBtn{background:rgba(255,255,255,.15);border:none;color:#fff;padding:6px 14px;border-radius:8px;cursor:pointer;font-size:13px}
-#logoutBtn:hover{background:rgba(255,255,255,.25)}
+/* ── Layout principal ───────────────────────────────────────────────────── */
+#app-view{display:none;flex-direction:column;height:100vh}
+header{background:#1565C0;color:#fff;padding:0 20px;height:54px;display:flex;align-items:center;gap:12px;flex-shrink:0}
+header .logo{font-weight:700;font-size:1.1rem;flex:1}
+header .hbtn{background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:6px;padding:6px 14px;cursor:pointer;font-size:.85rem;font-weight:600;transition:background .2s}
+header .hbtn:hover{background:rgba(255,255,255,.28)}
+header .hbtn.active{background:rgba(255,255,255,.3);box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.6)}
+#unread-badge{background:#e53935;color:#fff;border-radius:12px;padding:3px 10px;font-size:.8rem;font-weight:700;display:none}
 
-/* LAYOUT */
-#mainLayout{display:flex;flex:1;overflow:hidden}
+.layout{display:flex;flex:1;overflow:hidden}
 
-/* SIDEBAR */
-#sidebar{width:300px;background:#fff;border-right:1px solid #e2e8f0;display:flex;flex-direction:column;flex-shrink:0}
-#sidebarSearch{padding:12px;border-bottom:1px solid #e2e8f0}
-#sidebarSearch input{width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px;outline:none;background:#f8f9fa}
-#sidebarSearch input:focus{border-color:#1565C0}
-#senderList{overflow-y:auto;flex:1}
-.sender-section-label{padding:8px 16px 4px;font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;background:#f8f9fa;border-bottom:1px solid #e2e8f0}
-.sender-item{display:flex;align-items:center;padding:12px 16px;cursor:pointer;border-bottom:1px solid #f1f5f9;transition:background .15s}
-.sender-item:hover{background:#f0f7ff}
-.sender-item.active{background:#e3f2fd;border-left:3px solid #1565C0}
-.sender-avatar{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px;color:#fff;flex-shrink:0;margin-right:12px}
-.sender-info{flex:1;min-width:0}
-.sender-name{font-weight:600;font-size:14px;color:#1e293b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.sender-preview{font-size:12px;color:#94a3b8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
-.sender-meta{display:flex;flex-direction:column;align-items:flex-end;gap:4px}
-.sender-count{background:#1565C0;color:#fff;border-radius:12px;padding:2px 8px;font-size:11px;font-weight:700}
-.sender-unread{background:#ef4444;color:#fff;border-radius:12px;padding:2px 7px;font-size:11px;font-weight:700}
+/* ── Sidebar ────────────────────────────────────────────────────────────── */
+#sidebar{width:300px;background:#fff;border-right:1px solid #e0e0e0;display:flex;flex-direction:column;flex-shrink:0;overflow-y:auto}
+.sidebar-section-title{font-size:.7rem;font-weight:700;color:#9e9e9e;text-transform:uppercase;letter-spacing:.08em;padding:12px 16px 6px}
+.sender-item{display:flex;align-items:center;gap:12px;padding:10px 14px;cursor:pointer;transition:background .15s;border-bottom:1px solid #f5f5f5}
+.sender-item:hover{background:#f5f7ff}
+.sender-item.active{background:#e8eef9}
+.s-avatar{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.95rem;color:#fff;flex-shrink:0}
+.s-info{flex:1;min-width:0}
+.s-name{font-weight:600;font-size:.9rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.s-sub{font-size:.75rem;color:#888;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.s-badge{background:#1565C0;color:#fff;border-radius:10px;padding:2px 7px;font-size:.72rem;font-weight:700;flex-shrink:0}
 
-/* MAIN CONTENT */
-#mainContent{flex:1;display:flex;flex-direction:column;overflow:hidden}
-#contentHeader{background:#fff;padding:14px 20px;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;justify-content:space-between}
-#contentHeader h2{font-size:16px;font-weight:700;color:#1e293b}
-#contentHeader span{font-size:13px;color:#94a3b8}
-#messageList{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px}
-#emptyState{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#94a3b8}
-#emptyState .icon{font-size:48px;margin-bottom:12px}
-#emptyState p{font-size:15px}
+/* ── Panel messages ─────────────────────────────────────────────────────── */
+#msg-panel{flex:1;display:flex;flex-direction:column;overflow:hidden}
+#no-sender{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#aaa}
+#no-sender .bubble{font-size:3.5rem;margin-bottom:14px}
+#no-sender p{font-size:.95rem}
 
-/* MESSAGE CARD */
-.msg-card{background:#fff;border-radius:10px;padding:16px;box-shadow:0 1px 4px rgba(0,0,0,.06);transition:background .2s,border .2s;border:2px solid transparent}
-.msg-card.status-approuve{background:#f0fdf4;border-color:#22c55e}
-.msg-card.status-pas_de_commande{background:#fef2f2;border-color:#ef4444}
-.msg-card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:8px}
-.msg-type-badge{font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;background:#e0f2fe;color:#0369a1;text-transform:uppercase;flex-shrink:0}
-.msg-type-badge.sms{background:#e0f2fe;color:#0369a1}
-.msg-type-badge.notification{background:#fef9c3;color:#854d0e}
-.msg-type-badge.call{background:#ede9fe;color:#6d28d9}
-.msg-content{font-size:14px;color:#1e293b;line-height:1.5;word-break:break-word}
-.msg-footer{display:flex;align-items:center;justify-content:space-between;margin-top:10px}
-.msg-date{font-size:12px;color:#94a3b8}
-.msg-status-area{display:flex;align-items:center;gap:8px}
-.status-indicator{font-size:12px;font-weight:600;padding:3px 10px;border-radius:12px}
-.status-indicator.approuve{background:#dcfce7;color:#15803d}
-.status-indicator.pas_de_commande{background:#fee2e2;color:#b91c1c}
-.status-btn{position:relative}
-.status-btn button{background:#f8fafc;border:1px solid #e2e8f0;color:#475569;padding:5px 12px;border-radius:8px;font-size:12px;cursor:pointer;font-weight:500}
-.status-btn button:hover{background:#e2e8f0}
-.status-dropdown{position:absolute;right:0;bottom:32px;background:#fff;border:1px solid #e2e8f0;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:100;min-width:160px;overflow:hidden;display:none}
-.status-dropdown.open{display:block}
-.status-dropdown button{display:flex;align-items:center;gap:8px;width:100%;padding:10px 14px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:500;text-align:left}
-.status-dropdown button:hover{background:#f8fafc}
-.status-dropdown button.opt-approuve{color:#15803d}
-.status-dropdown button.opt-approuve:hover{background:#f0fdf4}
-.status-dropdown button.opt-pas_de_commande{color:#b91c1c}
-.status-dropdown button.opt-pas_de_commande:hover{background:#fef2f2}
+#sender-view{flex:1;display:none;flex-direction:column;overflow:hidden}
+.panel-header{background:#fff;border-bottom:1px solid #e0e0e0;padding:12px 20px;display:flex;align-items:center;gap:12px}
+.panel-header h2{font-size:1rem;font-weight:700;color:#1565C0;flex:1}
+.search-box{display:flex;align-items:center;background:#f5f5f5;border-radius:8px;padding:6px 12px;gap:6px;width:260px}
+.search-box input{background:none;border:none;outline:none;font-size:.88rem;width:100%;color:#333}
+.search-box input::placeholder{color:#aaa}
 
-/* SCROLLBAR */
-::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:#f1f5f9}::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:3px}
+#messages-list{flex:1;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:10px}
+#msg-empty{text-align:center;color:#aaa;padding:40px 0;display:none}
 
-/* LOADING */
-.spinner{width:32px;height:32px;border:3px solid #e2e8f0;border-top-color:#1565C0;border-radius:50%;animation:spin .8s linear infinite;margin:40px auto}
-@keyframes spin{to{transform:rotate(360deg)}}
+/* ── Cartes messages ────────────────────────────────────────────────────── */
+.msg-card{background:#fff;border-radius:10px;padding:14px 16px;border-left:4px solid #e0e0e0;box-shadow:0 1px 3px rgba(0,0,0,.06);transition:border-color .2s,background .2s}
+.msg-card.status-approuve{border-left-color:#43a047;background:#f1f8f1}
+.msg-card.status-pas_de_commande{border-left-color:#e53935;background:#fff5f5}
+.msg-card .card-top{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.type-badge{font-size:.65rem;font-weight:700;text-transform:uppercase;padding:2px 7px;border-radius:4px;letter-spacing:.05em}
+.type-sms{background:#e3f2fd;color:#1565C0}
+.type-notification{background:#e8f5e9;color:#2e7d32}
+.type-call{background:#fff3e0;color:#e65100}
+.msg-date{font-size:.72rem;color:#aaa;margin-left:auto}
+.msg-content{font-size:.88rem;color:#444;line-height:1.5;margin-bottom:10px;word-break:break-word}
+.msg-content.empty{font-style:italic;color:#bbb}
+.card-actions{display:flex;gap:8px}
+.btn-status{padding:5px 12px;border:none;border-radius:6px;font-size:.78rem;font-weight:600;cursor:pointer;transition:all .2s;opacity:.85}
+.btn-status:hover{opacity:1}
+.btn-approuve{background:#e8f5e9;color:#2e7d32}
+.btn-approuve.active{background:#43a047;color:#fff}
+.btn-pasCmd{background:#ffebee;color:#c62828}
+.btn-pasCmd.active{background:#e53935;color:#fff}
+.btn-reset{background:#f5f5f5;color:#777;font-size:.73rem;padding:5px 8px}
 
-/* COLORS FOR AVATARS */
-.c0{background:#1565C0}.c1{background:#7c3aed}.c2{background:#0891b2}.c3{background:#15803d}.c4{background:#b45309}.c5{background:#be185d}.c6{background:#0f766e}.c7{background:#6d28d9}
+/* ── Panel Admin ────────────────────────────────────────────────────────── */
+#admin-view{display:none;flex-direction:column;height:100vh}
+.admin-body{flex:1;overflow-y:auto;padding:24px}
+.admin-tabs{display:flex;gap:4px;padding:16px 24px 0;background:#fff;border-bottom:1px solid #e0e0e0}
+.admin-tab{padding:10px 20px;border:none;background:none;cursor:pointer;font-size:.9rem;font-weight:600;color:#777;border-bottom:3px solid transparent;transition:all .2s}
+.admin-tab.active{color:#1565C0;border-bottom-color:#1565C0}
+.admin-section{display:none}
+.admin-section.active{display:block}
+.admin-card{background:#fff;border-radius:10px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,.08);margin-bottom:20px}
+.admin-card h3{font-size:1rem;font-weight:700;color:#333;margin-bottom:16px;padding-bottom:10px;border-bottom:1px solid #f0f0f0}
+.form-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;align-items:flex-end}
+.form-row label{font-size:.82rem;font-weight:600;color:#555;display:block;margin-bottom:4px}
+.form-row input,.form-row select{padding:9px 12px;border:1.5px solid #ddd;border-radius:7px;font-size:.88rem;outline:none;min-width:140px;transition:border .2s}
+.form-row input:focus,.form-row select:focus{border-color:#1565C0}
+.btn-primary{background:#1565C0;color:#fff;border:none;border-radius:7px;padding:9px 18px;font-size:.88rem;font-weight:600;cursor:pointer;transition:background .2s}
+.btn-primary:hover{background:#0d47a1}
+.btn-danger{background:#e53935;color:#fff;border:none;border-radius:7px;padding:7px 14px;font-size:.8rem;font-weight:600;cursor:pointer;transition:background .2s}
+.btn-danger:hover{background:#c62828}
+.btn-sm{padding:6px 12px;font-size:.8rem}
+.admin-table{width:100%;border-collapse:collapse}
+.admin-table th{text-align:left;font-size:.78rem;font-weight:700;color:#888;text-transform:uppercase;padding:8px 12px;background:#fafafa;border-bottom:1px solid #eee}
+.admin-table td{padding:10px 12px;border-bottom:1px solid #f5f5f5;font-size:.88rem;vertical-align:top}
+.admin-table tr:last-child td{border-bottom:none}
+.role-badge{font-size:.7rem;padding:2px 8px;border-radius:4px;font-weight:700}
+.role-admin{background:#fff3e0;color:#e65100}
+.role-user{background:#e8f5e9;color:#2e7d32}
+.device-chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.device-chip{background:#e3f2fd;color:#1565C0;font-size:.72rem;padding:2px 8px;border-radius:4px;font-weight:600}
+.perm-modal{position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;z-index:1000;display:none}
+.perm-modal.open{display:flex}
+.perm-box{background:#fff;border-radius:12px;padding:28px;width:420px;max-height:80vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,.2)}
+.perm-box h3{margin-bottom:16px;font-size:1rem;color:#333}
+.perm-device-item{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #f5f5f5}
+.perm-device-item:last-child{border-bottom:none}
+.perm-device-item input[type=checkbox]{width:16px;height:16px;cursor:pointer;accent-color:#1565C0}
+.perm-device-label{flex:1;font-size:.9rem}
+.perm-actions{margin-top:16px;display:flex;gap:8px;justify-content:flex-end}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:10px 22px;border-radius:8px;font-size:.88rem;z-index:9999;opacity:0;transition:opacity .3s;pointer-events:none}
+.toast.show{opacity:1}
 </style>
 </head>
 <body>
 
-<!-- LOGIN -->
-<div id="loginScreen">
+<!-- ── VUE LOGIN ──────────────────────────────────────────────────────────── -->
+<div id="login-view">
   <div class="login-card">
     <h1>📱 SMS Mirror</h1>
     <p>Tableau de bord en temps réel</p>
-    <input type="password" id="pwdInput" placeholder="Mot de passe" onkeydown="if(event.key==='Enter')doLogin()"/>
-    <button onclick="doLogin()">Connexion</button>
-    <div id="loginError" class="login-error"></div>
+    <input type="text" id="login-username" placeholder="Nom d'utilisateur (admin par défaut)">
+    <input type="password" id="login-password" placeholder="Mot de passe">
+    <button id="login-btn">Connexion</button>
+    <div id="login-error"></div>
   </div>
 </div>
 
-<!-- APP -->
-<div id="app" style="display:none;flex:1;flex-direction:column;height:100vh">
-  <div id="appHeader">
-    <h1>📱 SMS Mirror</h1>
-    <div class="header-right">
-      <span id="totalBadge" class="badge-total">0 messages</span>
-      <button id="logoutBtn" onclick="doLogout()">Déconnexion</button>
-    </div>
-  </div>
-  <div id="mainLayout">
-    <!-- SIDEBAR -->
-    <div id="sidebar">
-      <div id="sidebarSearch">
-        <input type="text" id="searchInput" placeholder="🔍 Rechercher un expéditeur..." oninput="filterSenders()"/>
+<!-- ── VUE PRINCIPALE ─────────────────────────────────────────────────────── -->
+<div id="app-view">
+  <header>
+    <span class="logo">📱 SMS Mirror</span>
+    <button class="hbtn active" id="btn-dashboard" onclick="switchView('dashboard')">Dashboard</button>
+    <button class="hbtn" id="btn-admin" onclick="switchView('admin')" style="display:none">⚙ Admin</button>
+    <span id="unread-badge">0</span>
+    <button class="hbtn" onclick="location.reload()" title="Rafraîchir">🔄 Rafraîchir</button>
+    <button class="hbtn" onclick="logout()">Déconnexion</button>
+  </header>
+  <div class="layout">
+    <!-- Sidebar -->
+    <nav id="sidebar">
+      <div id="pinned-section">
+        <div class="sidebar-section-title">📌 Épinglés</div>
+        <div id="pinned-list"></div>
       </div>
-      <div id="senderList"><div class="spinner"></div></div>
-    </div>
-    <!-- CONTENT -->
-    <div id="mainContent">
-      <div id="contentHeader">
-        <h2 id="contentTitle">Sélectionnez un expéditeur</h2>
-        <span id="contentCount"></span>
+      <div id="others-section" style="display:none">
+        <div class="sidebar-section-title">Autres</div>
+        <div id="others-list"></div>
       </div>
-      <div id="messageList">
-        <div id="emptyState">
-          <div class="icon">💬</div>
-          <p>Cliquez sur un expéditeur pour voir ses messages</p>
-        </div>
+    </nav>
+    <!-- Panel messages -->
+    <div id="msg-panel">
+      <div id="no-sender">
+        <div class="bubble">💬</div>
+        <p>Cliquez sur un expéditeur pour voir ses messages</p>
       </div>
-    </div>
-  </div>
-</div>
-
-<script>
-const PINNED = ['Wave Business', '+454', 'MobileMoney', 'MoovMoney'];
-let TOKEN = localStorage.getItem('sm_token') || '';
-let allSenders = [];
-let activeSender = null;
-let activeMessages = [];
-let socket = null;
-
-// ─── Auth ─────────────────────────────────────────────────────────────────────
-async function doLogin() {
-  const pwd = document.getElementById('pwdInput').value;
-  const err = document.getElementById('loginError');
-  err.textContent = '';
-  try {
-    const r = await fetch('/api/login', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pwd})});
-    const d = await r.json();
-    if (!r.ok) { err.textContent = d.error || 'Mot de passe incorrect'; return; }
-    TOKEN = d.token;
-    localStorage.setItem('sm_token', TOKEN);
-    showApp();
-  } catch(e) { err.textContent = 'Erreur de connexion'; }
-}
-function doLogout() {
-  TOKEN = ''; localStorage.removeItem('sm_token');
-  document.getElementById('app').style.display = 'none';
-  document.getElementById('loginScreen').style.display = 'flex';
-}
-function authHeaders() { return {'Authorization':'Bearer '+TOKEN,'Content-Type':'application/json'}; }
-
-// ─── Initialisation ───────────────────────────────────────────────────────────
-async function showApp() {
-  document.getElementById('loginScreen').style.display = 'none';
-  document.getElementById('app').style.display = 'flex';
-  await loadSenders();
-  connectSocket();
-}
-
-function connectSocket() {
-  socket = io();
-  socket.on('new_messages', (msgs) => {
-    loadSenders();
-    if (activeSender) {
-      const relevant = msgs.filter(m =>
-        (m.sender_name||m.sender||m.app_name||'Inconnu') === activeSender ||
-        m.sender === activeSender || m.app_name === activeSender
-      );
-      if (relevant.length) { relevant.forEach(m => prependMessage(m)); }
-    }
-  });
-  socket.on('message_status_updated', ({id, status}) => {
-    const card = document.getElementById('card-'+id);
-    if (card) applyStatus(card, status);
-    const msg = activeMessages.find(m => m.id === id);
-    if (msg) msg.status = status;
-  });
-}
-
-// ─── Senders ─────────────────────────────────────────────────────────────────
-async function loadSenders() {
-  try {
-    const r = await fetch('/api/senders', {headers: authHeaders()});
-    if (r.status === 401) { doLogout(); return; }
-    const senders = await r.json();
-    allSenders = senders;
-    // Mettre à jour total
-    const total = senders.reduce((s,x)=>s+x.count,0);
-    document.getElementById('totalBadge').textContent = total + ' messages';
-    renderSenders(senders);
-  } catch(e) { console.error(e); }
-}
-
-function avatarColor(name) {
-  let h = 0; for(let i=0;i<name.length;i++) h = (h*31+name.charCodeAt(i))%8;
-  return 'c'+h;
-}
-function avatarLetter(name) { return (name||'?')[0].toUpperCase(); }
-
-function renderSenders(senders) {
-  const list = document.getElementById('senderList');
-  const pinned = senders.filter(s => PINNED.includes(s.display_name));
-  const others = senders.filter(s => !PINNED.includes(s.display_name));
-
-  // S'assurer que tous les PINNED apparaissent (même si 0 message)
-  const pinnedAll = PINNED.map(name => {
-    const found = pinned.find(s => s.display_name === name);
-    return found || {display_name: name, count: 0, unread: 0, last_ts: 0, type: 'sms'};
-  });
-
-  let html = '';
-  html += '<div class="sender-section-label">📌 Épinglés</div>';
-  pinnedAll.forEach(s => { html += senderItemHTML(s); });
-  if (others.length) {
-    html += '<div class="sender-section-label">Tous les expéditeurs (' + others.length + ')</div>';
-    others.forEach(s => { html += senderItemHTML(s); });
-  }
-  list.innerHTML = html;
-  // Re-highlight active
-  if (activeSender) {
-    const el = list.querySelector('[data-sender="'+CSS.escape(activeSender)+'"]');
-    if (el) el.classList.add('active');
-  }
-}
-
-function senderItemHTML(s) {
-  const name = s.display_name;
-  const active = name === activeSender ? ' active' : '';
-  const esc = name.replace(/"/g,'&quot;');
-  const lastMsg = s.count > 0 ? s.count + ' message' + (s.count>1?'s':'') : 'Aucun message';
-  return `<div class="sender-item${active}" data-sender="${esc}" onclick="selectSender('${esc}')">
-    <div class="sender-avatar ${avatarColor(name)}">${avatarLetter(name)}</div>
-    <div class="sender-info">
-      <div class="sender-name">${esc}</div>
-      <div class="sender-preview">${lastMsg}</div>
-    </div>
-    <div class="sender-meta">
-      <span class="sender-count">${s.count}</span>
-      ${s.unread > 0 ? '<span class="sender-unread">'+s.unread+'</span>' : ''}
-    </div>
-  </div>`;
-}
-
-function filterSenders() {
-  const q = document.getElementById('searchInput').value.toLowerCase();
-  if (!q) { renderSenders(allSenders); return; }
-  const filtered = allSenders.filter(s => s.display_name.toLowerCase().includes(q));
-  renderSenders(filtered);
-}
-
-// ─── Messages ─────────────────────────────────────────────────────────────────
-async function selectSender(name) {
-  activeSender = name;
-  // Update active state in sidebar
-  document.querySelectorAll('.sender-item').forEach(el => el.classList.remove('active'));
-  const el = document.querySelector('[data-sender="'+CSS.escape(name)+'"]');
-  if (el) el.classList.add('active');
-
-  document.getElementById('contentTitle').textContent = name;
-  document.getElementById('messageList').innerHTML = '<div class="spinner"></div>';
-
-  try {
-    const r = await fetch('/api/messages?sender='+encodeURIComponent(name)+'&limit=200', {headers: authHeaders()});
-    const d = await r.json();
-    activeMessages = d.messages || [];
-    document.getElementById('contentCount').textContent = activeMessages.length + ' message' + (activeMessages.length>1?'s':'');
-    renderMessages(activeMessages);
-    // Mark as read
-    if (activeMessages.length) {
-      const unreadIds = activeMessages.filter(m=>!m.is_read).map(m=>m.id);
-      if (unreadIds.length) {
-        fetch('/api/messages/read',{method:'POST',headers:authHeaders(),body:JSON.stringify({ids:unreadIds})});
-        loadSenders();
-      }
-    }
-  } catch(e) { console.error(e); }
-}
-
-function renderMessages(msgs) {
-  const list = document.getElementById('messageList');
-  if (!msgs.length) {
-    list.innerHTML = '<div id="emptyState"><div class="icon">📭</div><p>Aucun message</p></div>';
-    return;
-  }
-  list.innerHTML = msgs.map(m => messageCardHTML(m)).join('');
-}
-
-function messageCardHTML(m) {
-  const statusClass = m.status ? 'status-'+m.status : '';
-  const d = new Date(m.timestamp);
-  const dateStr = d.toLocaleDateString('fr-FR') + ' ' + d.toLocaleTimeString('fr-FR', {hour:'2-digit',minute:'2-digit'});
-  const content = m.content || (m.call_type ? 'Appel ' + m.call_type + (m.call_duration?' ('+m.call_duration+'s)':'') : '(vide)');
-  const statusLabel = m.status === 'approuve' ? '<span class="status-indicator approuve">✅ Approuvé</span>'
-    : m.status === 'pas_de_commande' ? '<span class="status-indicator pas_de_commande">❌ Pas de commande</span>' : '';
-  return `<div class="msg-card ${statusClass}" id="card-${m.id}">
-    <div class="msg-card-top">
-      <div style="flex:1">
-        <span class="msg-type-badge ${m.type}">${m.type === 'sms' ? 'SMS' : m.type === 'notification' ? 'Notif' : 'Appel'}</span>
-      </div>
-    </div>
-    <div class="msg-content">${escHtml(content)}</div>
-    <div class="msg-footer">
-      <span class="msg-date">📅 ${dateStr}</span>
-      <div class="msg-status-area">
-        ${statusLabel}
-        <div class="status-btn" id="sbtn-${m.id}">
-          <button onclick="toggleDropdown('${m.id}')">Statut ▾</button>
-          <div class="status-dropdown" id="drop-${m.id}">
-            <button class="opt-approuve" onclick="setStatus('${m.id}','approuve')">✅ Approuvé</button>
-            <button class="opt-pas_de_commande" onclick="setStatus('${m.id}','pas_de_commande')">❌ Pas de commande</button>
+      <div id="sender-view">
+        <div class="panel-header">
+          <h2 id="panel-title">—</h2>
+          <div class="search-box">
+            <span>🔍</span>
+            <input type="text" id="search-input" placeholder="Rechercher dans les messages…">
           </div>
         </div>
+        <div id="messages-list">
+          <div id="msg-empty">Aucun message</div>
+        </div>
       </div>
     </div>
-  </div>`;
+  </div>
+</div>
+
+<!-- ── VUE ADMIN ──────────────────────────────────────────────────────────── -->
+<div id="admin-view">
+  <header>
+    <span class="logo">📱 SMS Mirror</span>
+    <button class="hbtn" id="btn-dashboard2" onclick="switchView('dashboard')">Dashboard</button>
+    <button class="hbtn active" id="btn-admin2" onclick="switchView('admin')">⚙ Admin</button>
+    <button class="hbtn" onclick="location.reload()" title="Rafraîchir">🔄 Rafraîchir</button>
+    <button class="hbtn" onclick="logout()">Déconnexion</button>
+  </header>
+  <div class="admin-tabs">
+    <button class="admin-tab active" onclick="switchAdminTab('devices')">📱 Appareils</button>
+    <button class="admin-tab" onclick="switchAdminTab('users')">👤 Utilisateurs</button>
+  </div>
+  <div class="admin-body">
+
+    <!-- Onglet Appareils -->
+    <div id="tab-devices" class="admin-section active">
+      <div class="admin-card">
+        <h3>Appareils enregistrés</h3>
+        <p style="font-size:.83rem;color:#888;margin-bottom:14px">Chaque appareil Android où l'application est installée est listé ci-dessous avec son numéro d'identification.</p>
+        <table class="admin-table" id="devices-table">
+          <thead><tr><th>N°</th><th>Nom affiché</th><th>ID appareil</th><th>Plateforme</th><th>Dernière activité</th><th>Actions</th></tr></thead>
+          <tbody id="devices-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Onglet Utilisateurs -->
+    <div id="tab-users" class="admin-section">
+      <div class="admin-card">
+        <h3>Créer un utilisateur</h3>
+        <div class="form-row">
+          <div><label>Nom d'utilisateur</label><input type="text" id="new-username" placeholder="ex: jean"></div>
+          <div><label>Mot de passe</label><input type="password" id="new-password" placeholder="Mot de passe"></div>
+          <div><label>Rôle</label>
+            <select id="new-role">
+              <option value="user">Utilisateur</option>
+              <option value="admin">Administrateur</option>
+            </select>
+          </div>
+          <div style="padding-bottom:1px"><button class="btn-primary" onclick="createUser()">Créer</button></div>
+        </div>
+        <div id="create-user-error" style="color:#e53935;font-size:.82rem"></div>
+      </div>
+      <div class="admin-card">
+        <h3>Utilisateurs existants</h3>
+        <table class="admin-table">
+          <thead><tr><th>Nom</th><th>Rôle</th><th>Appareils autorisés</th><th>Actions</th></tr></thead>
+          <tbody id="users-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── Modal permissions ──────────────────────────────────────────────────── -->
+<div class="perm-modal" id="perm-modal">
+  <div class="perm-box">
+    <h3>🔒 Accès appareils — <span id="perm-username"></span></h3>
+    <p style="font-size:.82rem;color:#888;margin-bottom:14px">Cochez les appareils auxquels cet utilisateur a accès.</p>
+    <div id="perm-devices-list"></div>
+    <div class="perm-actions">
+      <button class="hbtn" style="background:#f0f0f0;color:#333;border-radius:7px;padding:8px 16px" onclick="closePermModal()">Annuler</button>
+      <button class="btn-primary" onclick="savePermissions()">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── État global ──────────────────────────────────────────────────────────────
+let token        = localStorage.getItem('sm_token')    || '';
+let userRole     = localStorage.getItem('sm_role')     || '';
+let userName     = localStorage.getItem('sm_username') || '';
+let currentSender = null;
+let allMessages   = [];
+let allSenders    = [];
+let permUserId    = null;
+let adminDevices  = [];
+let socket        = null;
+
+const PINNED = ['Wave Business', '+454', 'MobileMoney', 'MoovMoney'];
+const COLORS  = ['#7b1fa2','#1565c0','#00838f','#2e7d32','#ef6c00','#c62828','#4527a0','#006064'];
+function getColor(name) {
+  let h = 0; for(let c of name) h = (h*31 + c.charCodeAt(0)) & 0xfffffff;
+  return COLORS[h % COLORS.length];
+}
+function initials(name) {
+  if(!name) return '?';
+  const p = name.trim().split(/\s+/);
+  return p.length > 1 ? (p[0][0]+p[1][0]).toUpperCase() : name.slice(0,2).toUpperCase();
+}
+function fmtDate(ts) {
+  const d = new Date(ts);
+  const now = new Date();
+  const diff = now - d;
+  if(diff < 60000)   return 'À l\'instant';
+  if(diff < 3600000) return Math.floor(diff/60000)+'min';
+  if(d.toDateString()===now.toDateString()) return d.toLocaleTimeString('fr',{hour:'2-digit',minute:'2-digit'});
+  return d.toLocaleDateString('fr',{day:'2-digit',month:'short'});
 }
 
-function prependMessage(m) {
-  activeMessages.unshift(m);
-  const list = document.getElementById('messageList');
-  const empty = document.getElementById('emptyState');
-  if (empty) empty.remove();
-  const div = document.createElement('div');
-  div.innerHTML = messageCardHTML(m);
-  list.insertBefore(div.firstChild, list.firstChild);
-  document.getElementById('contentCount').textContent = activeMessages.length + ' messages';
-}
-
-// ─── Status ───────────────────────────────────────────────────────────────────
-function toggleDropdown(id) {
-  // Close all others
-  document.querySelectorAll('.status-dropdown.open').forEach(d => {
-    if (d.id !== 'drop-'+id) d.classList.remove('open');
+// ── API helper ───────────────────────────────────────────────────────────────
+async function api(method, url, body) {
+  const r = await fetch(url, {
+    method,
+    headers: { 'Content-Type':'application/json', 'Authorization':'Bearer '+token },
+    body: body ? JSON.stringify(body) : undefined
   });
-  document.getElementById('drop-'+id).classList.toggle('open');
+  const data = await r.json();
+  if(!r.ok) throw new Error(data.error || 'Erreur');
+  return data;
 }
 
-// Close dropdowns on outside click
-document.addEventListener('click', e => {
-  if (!e.target.closest('.status-btn')) {
-    document.querySelectorAll('.status-dropdown.open').forEach(d => d.classList.remove('open'));
-  }
-});
+// ── Toast ────────────────────────────────────────────────────────────────────
+function showToast(msg, ok=true) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.background = ok ? '#43a047' : '#e53935';
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2800);
+}
 
-async function setStatus(id, status) {
-  document.getElementById('drop-'+id).classList.remove('open');
+// ── Auth ─────────────────────────────────────────────────────────────────────
+async function login() {
+  const username = document.getElementById('login-username').value.trim();
+  const password = document.getElementById('login-password').value.trim();
+  const errEl    = document.getElementById('login-error');
+  errEl.textContent = '';
   try {
-    const r = await fetch('/api/messages/'+id+'/status', {
-      method:'PATCH', headers: authHeaders(), body: JSON.stringify({status})
-    });
-    if (r.ok) {
-      const card = document.getElementById('card-'+id);
-      applyStatus(card, status);
-      const msg = activeMessages.find(m => m.id === id);
-      if (msg) msg.status = status;
-    }
+    const d = await fetch('/api/login', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ username: username||undefined, password })
+    }).then(r=>r.json());
+    if(d.error) { errEl.textContent = d.error; return; }
+    token    = d.token;
+    userRole = d.role;
+    userName = d.username;
+    localStorage.setItem('sm_token',    token);
+    localStorage.setItem('sm_role',     userRole);
+    localStorage.setItem('sm_username', userName);
+    showDashboard();
+  } catch(e) { errEl.textContent = 'Erreur de connexion'; }
+}
+function logout() {
+  localStorage.removeItem('sm_token');
+  localStorage.removeItem('sm_role');
+  localStorage.removeItem('sm_username');
+  location.reload();
+}
+
+// ── Vues ─────────────────────────────────────────────────────────────────────
+function switchView(view) {
+  document.getElementById('app-view').style.display   = view==='dashboard' ? 'flex'  : 'none';
+  document.getElementById('admin-view').style.display = view==='admin'     ? 'flex'  : 'none';
+  if(view==='admin') {
+    adminLoadDevices();
+    adminLoadUsers();
+  }
+}
+function switchAdminTab(tab) {
+  document.querySelectorAll('.admin-tab').forEach((t,i)=>{
+    t.classList.toggle('active', (i===0&&tab==='devices')||(i===1&&tab==='users'));
+  });
+  document.getElementById('tab-devices').classList.toggle('active', tab==='devices');
+  document.getElementById('tab-users').classList.toggle('active',   tab==='users');
+}
+
+// ── Dashboard ─────────────────────────────────────────────────────────────────
+function showDashboard() {
+  document.getElementById('login-view').style.display = 'none';
+  document.getElementById('app-view').style.display   = 'flex';
+  if(userRole==='admin') {
+    document.getElementById('btn-admin').style.display  = '';
+    document.getElementById('btn-admin2').style.display = '';
+  }
+  initSocket();
+  loadSenders();
+}
+
+// ── Sidebar ──────────────────────────────────────────────────────────────────
+async function loadSenders() {
+  try {
+    allSenders = await api('GET','/api/senders');
+    renderSidebar();
+    updateUnreadBadge();
   } catch(e) { console.error(e); }
 }
 
-function applyStatus(card, status) {
-  card.className = 'msg-card' + (status ? ' status-'+status : '');
-  const area = card.querySelector('.msg-status-area');
-  // Update indicator
-  const old = area.querySelector('.status-indicator');
-  if (old) old.remove();
-  if (status === 'approuve') {
-    area.insertAdjacentHTML('afterbegin', '<span class="status-indicator approuve">✅ Approuvé</span>');
-  } else if (status === 'pas_de_commande') {
-    area.insertAdjacentHTML('afterbegin', '<span class="status-indicator pas_de_commande">❌ Pas de commande</span>');
-  }
+function renderSidebar() {
+  const pinned = allSenders.filter(s => PINNED.includes(s.display_name));
+  const others = allSenders.filter(s => !PINNED.includes(s.display_name));
+
+  // Ajouter les épinglés absents
+  const pinnedFull = PINNED.map(name => {
+    const found = pinned.find(s=>s.display_name===name);
+    return found || { display_name:name, count:0, unread:0, last_ts:0 };
+  });
+
+  document.getElementById('pinned-list').innerHTML  = pinnedFull.map(senderHTML).join('');
+  document.getElementById('others-list').innerHTML  = others.map(senderHTML).join('');
+  document.getElementById('others-section').style.display = others.length ? '' : 'none';
+}
+
+function senderHTML(s) {
+  const badge = s.unread > 0
+    ? `<span class="s-badge">${s.unread}</span>`
+    : '';
+  const sub = s.last_ts
+    ? fmtDate(s.last_ts) + (s.count ? ` · ${s.count} msg` : '')
+    : 'Aucun message';
+  const isActive = currentSender === s.display_name ? ' active' : '';
+  return `<div class="sender-item${isActive}" onclick="selectSender('${escHtml(s.display_name)}')">
+    <div class="s-avatar" style="background:${getColor(s.display_name)}">${initials(s.display_name)}</div>
+    <div class="s-info">
+      <div class="s-name">${escHtml(s.display_name)}</div>
+      <div class="s-sub">${escHtml(sub)}</div>
+    </div>
+    ${badge}
+  </div>`;
 }
 
 function escHtml(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
-// ─── Boot ─────────────────────────────────────────────────────────────────────
-if (TOKEN) { showApp(); }
-else { document.getElementById('loginScreen').style.display = 'flex'; }
+function updateUnreadBadge() {
+  const total = allSenders.reduce((sum,s)=>sum+(s.unread||0),0);
+  const el = document.getElementById('unread-badge');
+  if(total > 0) { el.textContent = total+' non lu'+(total>1?'s':''); el.style.display=''; }
+  else          { el.style.display='none'; }
+}
+
+// ── Sélection expéditeur ─────────────────────────────────────────────────────
+async function selectSender(name) {
+  currentSender = name;
+  document.getElementById('search-input').value = '';
+  document.getElementById('panel-title').textContent = name;
+  document.getElementById('no-sender').style.display    = 'none';
+  document.getElementById('sender-view').style.display  = 'flex';
+  renderSidebar(); // highlight active
+  await fetchMessages(name);
+  // Marquer comme lus
+  const ids = allMessages.map(m=>m.id);
+  if(ids.length) {
+    api('POST','/api/messages/read',{ids}).catch(()=>{});
+    allSenders = allSenders.map(s => s.display_name===name ? {...s,unread:0} : s);
+    updateUnreadBadge();
+  }
+}
+
+async function fetchMessages(sender) {
+  try {
+    const d = await api('GET',`/api/messages?sender=${encodeURIComponent(sender)}&limit=500`);
+    allMessages = d.messages || [];
+    renderMessages();
+  } catch(e) { console.error(e); }
+}
+
+// ── Recherche dans messages ───────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('search-input').addEventListener('input', e => {
+    renderMessages(e.target.value.toLowerCase().trim());
+  });
+  document.getElementById('login-password').addEventListener('keydown', e => {
+    if(e.key==='Enter') login();
+  });
+});
+
+// ── Rendu messages ───────────────────────────────────────────────────────────
+function renderMessages(query='') {
+  const list = document.getElementById('messages-list');
+  const empty = document.getElementById('msg-empty');
+
+  const filtered = query
+    ? allMessages.filter(m =>
+        (m.content     ||'').toLowerCase().includes(query) ||
+        (m.sender_name ||'').toLowerCase().includes(query) ||
+        (m.sender      ||'').toLowerCase().includes(query) ||
+        (m.app_name    ||'').toLowerCase().includes(query)
+      )
+    : allMessages;
+
+  // Vider sauf l'élément empty
+  list.querySelectorAll('.msg-card').forEach(c=>c.remove());
+  empty.style.display = filtered.length === 0 ? '' : 'none';
+
+  filtered.forEach(m => {
+    const card = buildCard(m);
+    list.appendChild(card);
+  });
+}
+
+function buildCard(m) {
+  const div = document.createElement('div');
+  div.className = 'msg-card' + (m.status ? ' status-'+m.status : '');
+  div.id = 'card-'+m.id;
+
+  const typeLabel  = m.type==='sms' ? 'SMS' : m.type==='notification' ? 'Notif' : 'Appel';
+  const typeClass  = 'type-'+m.type;
+  const content    = m.content || m.call_type || '';
+  const contentCls = content ? '' : ' empty';
+  const contentTxt = content || (m.type==='call' ? '(Appel '+m.call_type+')' : '(Pas de contenu)');
+
+  div.innerHTML = `
+    <div class="card-top">
+      <span class="type-badge ${typeClass}">${typeLabel}</span>
+      <span class="msg-date">${fmtDate(m.timestamp)}</span>
+    </div>
+    <div class="msg-content${contentCls}">${escHtml(contentTxt)}</div>
+    <div class="card-actions">
+      <button class="btn-status btn-approuve ${m.status==='approuve'?'active':''}"
+        onclick="setStatus('${m.id}','approuve',this)">✔ Approuvé</button>
+      <button class="btn-status btn-pasCmd ${m.status==='pas_de_commande'?'active':''}"
+        onclick="setStatus('${m.id}','pas_de_commande',this)">✘ Pas de commande</button>
+      ${m.status ? `<button class="btn-status btn-reset" onclick="setStatus('${m.id}',null,this)">↺</button>` : ''}
+    </div>`;
+  return div;
+}
+
+async function setStatus(id, status, btn) {
+  try {
+    await api('PATCH', `/api/messages/${id}/status`, { status });
+    // Mettre à jour localement
+    allMessages = allMessages.map(m => m.id===id ? {...m, status} : m);
+    // Mettre à jour la carte
+    const card = document.getElementById('card-'+id);
+    if(card) {
+      const newCard = buildCard(allMessages.find(m=>m.id===id));
+      card.replaceWith(newCard);
+    }
+  } catch(e) { showToast('Erreur: '+e.message, false); }
+}
+
+// ── Socket.io ────────────────────────────────────────────────────────────────
+function initSocket() {
+  socket = io({ auth: { token } });
+
+  socket.on('new_messages', (msgs) => {
+    // Mettre à jour les senders
+    loadSenders();
+    // Si le sender actuel est concerné, ajouter en haut de la liste
+    if(currentSender) {
+      const relevant = msgs.filter(m => {
+        const dn = m.sender_name || m.sender || m.app_name || 'Inconnu';
+        return dn === currentSender;
+      });
+      if(relevant.length) {
+        allMessages = [...relevant, ...allMessages];
+        const q = document.getElementById('search-input').value.toLowerCase().trim();
+        renderMessages(q);
+      }
+    }
+  });
+
+  socket.on('message_status_updated', ({id, status}) => {
+    allMessages = allMessages.map(m => m.id===id ? {...m, status} : m);
+    const card = document.getElementById('card-'+id);
+    if(card) {
+      const newCard = buildCard(allMessages.find(m=>m.id===id));
+      card.replaceWith(newCard);
+    }
+  });
+
+  socket.on('messages_read', () => {
+    loadSenders();
+  });
+
+  socket.on('device_connected', () => {
+    loadSenders();
+  });
+}
+
+// ── Admin – Appareils ─────────────────────────────────────────────────────────
+async function adminLoadDevices() {
+  try {
+    adminDevices = await api('GET','/api/admin/devices');
+    const tbody = document.getElementById('devices-tbody');
+    if(!adminDevices.length) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#aaa;padding:24px">Aucun appareil enregistré</td></tr>';
+      return;
+    }
+    tbody.innerHTML = adminDevices.map(d => `
+      <tr id="dev-row-${d.id.replace(/[^a-z0-9]/gi,'_')}">
+        <td><strong>#${d.number||'—'}</strong></td>
+        <td id="dev-name-${d.id.replace(/[^a-z0-9]/gi,'_')}">${escHtml(d.display_name||d.name||'Appareil')}</td>
+        <td style="font-family:monospace;font-size:.78rem;color:#888">${escHtml(d.id)}</td>
+        <td>${escHtml(d.platform||'android')}</td>
+        <td>${d.last_seen ? fmtDate(d.last_seen) : '—'}</td>
+        <td>
+          <button class="btn-primary btn-sm" onclick="editDevice('${escHtml(d.id)}','${escHtml(d.display_name||d.name||'')}',${d.number||0})">✏ Renommer</button>
+        </td>
+      </tr>`).join('');
+  } catch(e) { console.error(e); }
+}
+
+function editDevice(id, currentName, currentNum) {
+  const name = prompt('Nom affiché pour cet appareil :', currentName);
+  if(name === null) return;
+  const num  = prompt('Numéro de cet appareil :', currentNum);
+  if(num === null) return;
+  api('PUT',`/api/admin/devices/${encodeURIComponent(id)}`,{
+    display_name: name.trim(),
+    number: parseInt(num)||currentNum
+  }).then(()=>{ showToast('Appareil mis à jour'); adminLoadDevices(); })
+    .catch(e=>showToast('Erreur: '+e.message, false));
+}
+
+// ── Admin – Utilisateurs ──────────────────────────────────────────────────────
+async function adminLoadUsers() {
+  try {
+    const users = await api('GET','/api/admin/users');
+    const tbody = document.getElementById('users-tbody');
+    if(!users.length) {
+      tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#aaa;padding:24px">Aucun utilisateur</td></tr>';
+      return;
+    }
+    tbody.innerHTML = users.map(u => {
+      const chips = (u.device_ids||[]).map(did => {
+        const dev = adminDevices.find(d=>d.id===did);
+        const lbl = dev ? (dev.display_name||dev.name||('Appareil #'+dev.number)) : did.slice(0,10)+'…';
+        return `<span class="device-chip">${escHtml(lbl)}</span>`;
+      }).join('');
+      return `<tr>
+        <td><strong>${escHtml(u.username)}</strong></td>
+        <td><span class="role-badge role-${u.role}">${u.role==='admin'?'Admin':'Utilisateur'}</span></td>
+        <td>${u.role==='admin' ? '<em style="color:#aaa">Tous les appareils</em>' : (chips||'<em style="color:#aaa">Aucun accès</em>')}<div class="device-chips" style="margin-top:4px"></div></td>
+        <td style="display:flex;gap:6px;flex-wrap:wrap">
+          ${u.role!=='admin' ? `<button class="btn-primary btn-sm" onclick="openPermModal(${u.id},'${escHtml(u.username)}',${JSON.stringify(u.device_ids||[])})">🔒 Accès</button>` : ''}
+          <button class="btn-primary btn-sm" onclick="changePassword(${u.id},'${escHtml(u.username)}')">🔑 MDP</button>
+          <button class="btn-danger btn-sm" onclick="deleteUser(${u.id},'${escHtml(u.username)}')">✕</button>
+        </td>
+      </tr>`;
+    }).join('');
+  } catch(e) { console.error(e); }
+}
+
+async function createUser() {
+  const username = document.getElementById('new-username').value.trim();
+  const password = document.getElementById('new-password').value.trim();
+  const role     = document.getElementById('new-role').value;
+  const errEl    = document.getElementById('create-user-error');
+  errEl.textContent = '';
+  if(!username||!password) { errEl.textContent='Remplissez tous les champs'; return; }
+  try {
+    await api('POST','/api/admin/users',{username,password,role});
+    document.getElementById('new-username').value = '';
+    document.getElementById('new-password').value = '';
+    showToast('Utilisateur créé avec succès');
+    adminLoadUsers();
+  } catch(e) { errEl.textContent = e.message; }
+}
+
+async function deleteUser(id, name) {
+  if(!confirm(`Supprimer l'utilisateur "${name}" ?`)) return;
+  try {
+    await api('DELETE',`/api/admin/users/${id}`);
+    showToast('Utilisateur supprimé');
+    adminLoadUsers();
+  } catch(e) { showToast('Erreur: '+e.message, false); }
+}
+
+async function changePassword(id, name) {
+  const pwd = prompt(`Nouveau mot de passe pour "${name}" :`);
+  if(!pwd) return;
+  try {
+    await api('PUT',`/api/admin/users/${id}/password`,{password:pwd});
+    showToast('Mot de passe modifié');
+  } catch(e) { showToast('Erreur: '+e.message, false); }
+}
+
+// ── Modal permissions ─────────────────────────────────────────────────────────
+function openPermModal(userId, username, currentDeviceIds) {
+  permUserId = userId;
+  document.getElementById('perm-username').textContent = username;
+  const list = document.getElementById('perm-devices-list');
+  if(!adminDevices.length) {
+    list.innerHTML = '<p style="color:#aaa;font-size:.85rem">Aucun appareil enregistré.</p>';
+  } else {
+    list.innerHTML = adminDevices.map(d => `
+      <div class="perm-device-item">
+        <input type="checkbox" id="perm-dev-${d.id.replace(/[^a-z0-9]/gi,'_')}"
+          value="${escHtml(d.id)}" ${currentDeviceIds.includes(d.id)?'checked':''}>
+        <label class="perm-device-label" for="perm-dev-${d.id.replace(/[^a-z0-9]/gi,'_')}">
+          <strong>#${d.number||'?'}</strong> — ${escHtml(d.display_name||d.name||d.id)}
+        </label>
+      </div>`).join('');
+  }
+  document.getElementById('perm-modal').classList.add('open');
+}
+
+function closePermModal() {
+  document.getElementById('perm-modal').classList.remove('open');
+  permUserId = null;
+}
+
+async function savePermissions() {
+  const checked = [...document.querySelectorAll('#perm-devices-list input[type=checkbox]:checked')];
+  const device_ids = checked.map(c=>c.value);
+  try {
+    await api('PUT',`/api/admin/users/${permUserId}/permissions`,{device_ids});
+    showToast('Permissions enregistrées');
+    closePermModal();
+    adminLoadUsers();
+  } catch(e) { showToast('Erreur: '+e.message, false); }
+}
+
+// ── Initialisation ────────────────────────────────────────────────────────────
+if(token) {
+  showDashboard();
+} else {
+  document.getElementById('login-view').style.display = 'flex';
+}
+document.getElementById('login-btn').addEventListener('click', login);
 </script>
 </body>
 </html>
