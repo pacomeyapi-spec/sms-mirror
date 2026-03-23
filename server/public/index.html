@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SMS Mirror — Tableau de bord</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+  <style>
+    /* ─── Reset & Variables ───────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:        #0f1117;
+      --bg2:       #1a1d27;
+      --bg3:       #22263a;
+      --border:    #2e3250;
+      --accent:    #4f8ef7;
+      --accent2:   #7c3aed;
+      --green:     #22c55e;
+      --red:       #ef4444;
+      --orange:    #f59e0b;
+      --text:      #e2e8f0;
+      --text2:     #94a3b8;
+      --text3:     #4a5568;
+      --sms-color:       #3b82f6;
+      --notif-color:     #8b5cf6;
+      --call-color:      #10b981;
+      --call-miss-color: #ef4444;
+    }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ─── Login Screen ────────────────────────────────── */
+    #login-screen {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      background: var(--bg);
+    }
+    .login-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 40px;
+      width: 360px;
+      text-align: center;
+    }
+    .login-card .logo {
+      font-size: 48px;
+      margin-bottom: 12px;
+    }
+    .login-card h1 {
+      font-size: 22px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+    .login-card p {
+      color: var(--text2);
+      font-size: 14px;
+      margin-bottom: 28px;
+    }
+    .login-card input {
+      width: 100%;
+      padding: 12px 16px;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 15px;
+      outline: none;
+      margin-bottom: 12px;
+      transition: border-color .2s;
+    }
+    .login-card input:focus { border-color: var(--accent); }
+    .btn-login {
+      width: 100%;
+      padding: 12px;
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity .2s;
+    }
+    .btn-login:hover { opacity: .85; }
+    .login-error { color: var(--red); font-size: 13px; margin-top: 10px; }
+
+    /* ─── App Layout ──────────────────────────────────── */
+    #app { display: none; flex-direction: column; height: 100vh; }
+
+    /* Header */
+    header {
+      background: var(--bg2);
+      border-bottom: 1px solid var(--border);
+      padding: 0 20px;
+      height: 60px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-shrink: 0;
+    }
+    .header-logo { font-size: 20px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+    .header-logo span { color: var(--accent); }
+    .header-search {
+      flex: 1;
+      max-width: 400px;
+      position: relative;
+    }
+    .header-search input {
+      width: 100%;
+      padding: 8px 14px 8px 36px;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 14px;
+      outline: none;
+      transition: border-color .2s;
+    }
+    .header-search input:focus { border-color: var(--accent); }
+    .header-search .search-icon {
+      position: absolute;
+      left: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text2);
+      font-size: 14px;
+    }
+    .header-right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+    .status-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 6px var(--green);
+    }
+    .status-dot.offline { background: var(--red); box-shadow: 0 0 6px var(--red); }
+    .status-text { font-size: 13px; color: var(--text2); }
+    .btn-mark-read {
+      padding: 6px 14px;
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text2);
+      border-radius: 7px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all .2s;
+    }
+    .btn-mark-read:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* Main layout */
+    .main {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      width: 220px;
+      background: var(--bg2);
+      border-right: 1px solid var(--border);
+      padding: 16px 0;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+    .sidebar-section {
+      padding: 6px 16px 2px;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 1px;
+      color: var(--text3);
+      text-transform: uppercase;
+    }
+    .sidebar-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 16px;
+      cursor: pointer;
+      border-radius: 0;
+      font-size: 14px;
+      color: var(--text2);
+      transition: all .15s;
+      border-left: 3px solid transparent;
+      user-select: none;
+    }
+    .sidebar-item:hover { background: var(--bg3); color: var(--text); }
+    .sidebar-item.active {
+      background: rgba(79,142,247,.12);
+      color: var(--accent);
+      border-left-color: var(--accent);
+    }
+    .sidebar-item .icon { font-size: 16px; width: 20px; text-align: center; }
+    .badge {
+      margin-left: auto;
+      background: var(--accent);
+      color: white;
+      border-radius: 10px;
+      padding: 1px 7px;
+      font-size: 11px;
+      font-weight: 600;
+      min-width: 20px;
+      text-align: center;
+    }
+    .badge.red { background: var(--red); }
+    .badge.purple { background: var(--accent2); }
+    .badge.green { background: var(--green); }
+
+    /* Devices section */
+    .device-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 16px;
+      font-size: 13px;
+      color: var(--text2);
+    }
+    .device-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--green);
+    }
+    .device-dot.old { background: var(--text3); }
+
+    /* Content area */
+    .content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: var(--bg);
+    }
+
+    /* Tabs */
+    .tabs {
+      display: flex;
+      gap: 2px;
+      padding: 12px 16px 0;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg);
+    }
+    .tab {
+      padding: 8px 18px;
+      font-size: 14px;
+      color: var(--text2);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+      transition: all .15s;
+      font-weight: 500;
+    }
+    .tab:hover { color: var(--text); }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+    /* Messages list */
+    .messages-container {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px;
+    }
+    .messages-container::-webkit-scrollbar { width: 6px; }
+    .messages-container::-webkit-scrollbar-track { background: transparent; }
+    .messages-container::-webkit-scrollbar-thumb { background: var(--bg3); border-radius: 3px; }
+
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      color: var(--text3);
+      gap: 12px;
+    }
+    .empty-state .empty-icon { font-size: 48px; }
+    .empty-state p { font-size: 15px; }
+
+    /* Message card */
+    .message-card {
+      display: flex;
+      gap: 12px;
+      padding: 12px 14px;
+      border-radius: 10px;
+      margin-bottom: 4px;
+      cursor: pointer;
+      transition: background .15s;
+      border: 1px solid transparent;
+      position: relative;
+    }
+    .message-card:hover { background: var(--bg2); }
+    .message-card.unread {
+      background: rgba(79,142,247,.05);
+      border-color: rgba(79,142,247,.15);
+    }
+    .message-card .avatar {
+      width: 42px; height: 42px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+      font-weight: 700;
+    }
+    .avatar.sms         { background: rgba(59,130,246,.2);  color: var(--sms-color); }
+    .avatar.notification{ background: rgba(139,92,246,.2); color: var(--notif-color); }
+    .avatar.call        { background: rgba(16,185,129,.2);  color: var(--call-color); }
+    .avatar.call.missed { background: rgba(239,68,68,.2);   color: var(--call-miss-color); }
+
+    .message-body { flex: 1; min-width: 0; }
+    .message-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 3px;
+    }
+    .sender-name {
+      font-weight: 600;
+      font-size: 14px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 200px;
+    }
+    .type-badge {
+      font-size: 10px;
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    .type-badge.sms          { background: rgba(59,130,246,.2);  color: var(--sms-color); }
+    .type-badge.notification { background: rgba(139,92,246,.2); color: var(--notif-color); }
+    .type-badge.call         { background: rgba(16,185,129,.2);  color: var(--call-color); }
+    .type-badge.call.missed  { background: rgba(239,68,68,.2);   color: var(--call-miss-color); }
+    .message-time {
+      margin-left: auto;
+      font-size: 12px;
+      color: var(--text2);
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .message-preview {
+      font-size: 13px;
+      color: var(--text2);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .app-sub {
+      font-size: 12px;
+      color: var(--text3);
+      margin-top: 1px;
+    }
+    .unread-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+      flex-shrink: 0;
+      margin-top: 6px;
+    }
+
+    /* Status bar */
+    .status-bar {
+      background: var(--bg2);
+      border-top: 1px solid var(--border);
+      padding: 6px 16px;
+      font-size: 12px;
+      color: var(--text3);
+      display: flex;
+      gap: 16px;
+      flex-shrink: 0;
+    }
+
+    /* Notification toast */
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--accent);
+      border-radius: 10px;
+      padding: 12px 16px;
+      max-width: 320px;
+      font-size: 14px;
+      z-index: 999;
+      transform: translateY(100px);
+      opacity: 0;
+      transition: all .3s ease;
+      box-shadow: 0 8px 24px rgba(0,0,0,.5);
+    }
+    #toast.show { transform: translateY(0); opacity: 1; }
+    #toast .toast-title { font-weight: 600; margin-bottom: 3px; }
+    #toast .toast-body { color: var(--text2); font-size: 13px; }
+  </style>
+</head>
+<body>
+
+<!-- LOGIN SCREEN -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="logo">📱</div>
+    <h1>SMS Mirror</h1>
+    <p>Entrez votre mot de passe pour accéder au tableau de bord</p>
+    <input type="password" id="password-input" placeholder="Mot de passe" />
+    <button class="btn-login" onclick="login()">Se connecter</button>
+    <div class="login-error" id="login-error"></div>
+  </div>
+</div>
+
+<!-- MAIN APP -->
+<div id="app">
+  <header>
+    <div class="header-logo">📱 <span>SMS</span>Mirror</div>
+    <div class="header-search">
+      <span class="search-icon">🔍</span>
+      <input type="text" id="search-input" placeholder="Rechercher un message, un contact..." oninput="onSearch(this.value)" />
+    </div>
+    <div class="header-right">
+      <div class="status-dot" id="status-dot"></div>
+      <span class="status-text" id="status-text">Connexion...</span>
+      <button class="btn-mark-read" onclick="markAllRead()">✓ Tout marquer lu</button>
+    </div>
+  </header>
+
+  <div class="main">
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <div class="sidebar-section">Filtres</div>
+      <div class="sidebar-item active" data-filter="all" onclick="setFilter('all', this)">
+        <span class="icon">💬</span> Tous
+        <span class="badge" id="badge-all">0</span>
+      </div>
+      <div class="sidebar-item" data-filter="sms" onclick="setFilter('sms', this)">
+        <span class="icon">✉️</span> SMS
+        <span class="badge" id="badge-sms">0</span>
+      </div>
+      <div class="sidebar-item" data-filter="notification" onclick="setFilter('notification', this)">
+        <span class="icon">🔔</span> Notifications
+        <span class="badge purple" id="badge-notification">0</span>
+      </div>
+      <div class="sidebar-item" data-filter="call" onclick="setFilter('call', this)">
+        <span class="icon">📞</span> Appels
+        <span class="badge green" id="badge-call">0</span>
+      </div>
+
+      <div class="sidebar-section" style="margin-top:12px;">Appareils</div>
+      <div id="devices-list">
+        <div class="device-item" style="color:var(--text3);font-size:12px;">Aucun appareil connecté</div>
+      </div>
+    </div>
+
+    <!-- Content -->
+    <div class="content">
+      <div class="messages-container" id="messages-list">
+        <div class="empty-state" id="empty-state">
+          <div class="empty-icon">📭</div>
+          <p>En attente de messages…</p>
+          <p style="font-size:12px;color:var(--text3);">Installez l'app Android et configurez le serveur</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="status-bar">
+    <span id="status-count">0 message(s)</span>
+    <span id="status-sync">Dernière sync: —</span>
+    <span style="margin-left:auto;" id="status-server">Serveur: —</span>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast">
+  <div class="toast-title" id="toast-title"></div>
+  <div class="toast-body" id="toast-body"></div>
+</div>
+
+<script>
+// ─── State ─────────────────────────────────────────────────────────
+let TOKEN = localStorage.getItem('sms_mirror_token') || null;
+let socket = null;
+let allMessages = [];
+let currentFilter = 'all';
+let searchQuery = '';
+let stats = { sms: 0, notification: 0, call: 0, total: 0 };
+
+// ─── Login ──────────────────────────────────────────────────────────
+async function login() {
+  const pw = document.getElementById('password-input').value.trim();
+  if (!pw) return;
+  try {
+    const r = await fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pw })
+    });
+    const data = await r.json();
+    if (r.ok) {
+      TOKEN = data.token;
+      localStorage.setItem('sms_mirror_token', TOKEN);
+      showApp();
+    } else {
+      document.getElementById('login-error').textContent = 'Mot de passe incorrect';
+    }
+  } catch {
+    document.getElementById('login-error').textContent = 'Erreur de connexion au serveur';
+  }
+}
+
+document.getElementById('password-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') login();
+});
+
+// ─── App init ──────────────────────────────────────────────────────
+async function showApp() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'flex';
+  await loadMessages();
+  await loadStats();
+  connectSocket();
+}
+
+// Check auto-login
+if (TOKEN) {
+  fetch('/api/stats', { headers: { Authorization: 'Bearer ' + TOKEN } })
+    .then(r => { if (r.ok) showApp(); else { TOKEN = null; localStorage.removeItem('sms_mirror_token'); } })
+    .catch(() => {});
+}
+
+// ─── API ────────────────────────────────────────────────────────────
+async function api(path, options = {}) {
+  options.headers = { ...(options.headers||{}), Authorization: 'Bearer ' + TOKEN };
+  return fetch(path, options);
+}
+
+async function loadMessages() {
+  const params = new URLSearchParams({ limit: 500 });
+  if (currentFilter !== 'all') params.set('type', currentFilter);
+  if (searchQuery) params.set('search', searchQuery);
+
+  const r = await api('/api/messages?' + params);
+  const data = await r.json();
+  allMessages = data.messages || [];
+  renderMessages();
+}
+
+async function loadStats() {
+  const r = await api('/api/stats');
+  const data = await r.json();
+  stats = data;
+  updateBadges(data);
+  renderDevices(data.devices || []);
+  document.getElementById('status-count').textContent = `${data.total} message(s) — ${data.unread} non lu(s)`;
+  document.getElementById('status-server').textContent = `Serveur: en ligne`;
+}
+
+async function markAllRead() {
+  await api('/api/messages/read', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: [] }) });
+  allMessages.forEach(m => m.is_read = 1);
+  renderMessages();
+  document.getElementById('status-count').textContent = `${allMessages.length} message(s) — 0 non lu(s)`;
+}
+
+// ─── Render ─────────────────────────────────────────────────────────
+function renderMessages() {
+  const container = document.getElementById('messages-list');
+  const emptyState = document.getElementById('empty-state');
+
+  if (allMessages.length === 0) {
+    emptyState.style.display = 'flex';
+    return;
+  }
+  emptyState.style.display = 'none';
+
+  container.innerHTML = allMessages.map(m => messageCard(m)).join('');
+}
+
+function messageCard(m) {
+  const isMissed = m.type === 'call' && m.call_type === 'MISSED';
+  const avatarClass = m.type + (isMissed ? ' missed' : '');
+  const avatar = m.type === 'sms' ? '✉️'
+    : m.type === 'notification' ? (m.app_name ? appEmoji(m.app_name) : '🔔')
+    : isMissed ? '📵' : '📞';
+
+  const name = m.sender_name || m.sender || m.app_name || '?';
+  const firstLetter = name.charAt(0).toUpperCase();
+
+  let preview = '';
+  if (m.type === 'sms') preview = m.content || '';
+  else if (m.type === 'notification') preview = m.content || '';
+  else if (m.type === 'call') {
+    const dur = m.call_duration ? formatDuration(m.call_duration) : '';
+    preview = isMissed ? '📵 Appel manqué' : `📞 ${dur}`;
+  }
+
+  const time = formatTime(m.timestamp);
+
+  return `<div class="message-card ${m.is_read ? '' : 'unread'}" onclick="markOneRead('${m.id}', this)">
+    <div class="avatar ${avatarClass}">${avatar}</div>
+    <div class="message-body">
+      <div class="message-header">
+        <span class="sender-name">${esc(name)}</span>
+        <span class="type-badge ${m.type}${isMissed?' missed':''}">${m.type === 'notification' ? 'notif' : m.type}</span>
+        <span class="message-time">${time}</span>
+      </div>
+      <div class="message-preview">${esc(preview)}</div>
+      ${m.app_name && m.type === 'notification' ? `<div class="app-sub">via ${esc(m.app_name)}</div>` : ''}
+    </div>
+    ${m.is_read ? '' : '<div class="unread-dot"></div>'}
+  </div>`;
+}
+
+function markOneRead(id, el) {
+  const msg = allMessages.find(m => m.id === id);
+  if (msg && !msg.is_read) {
+    msg.is_read = 1;
+    api('/api/messages/read', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: [id] }) });
+    el.classList.remove('unread');
+    el.querySelector('.unread-dot')?.remove();
+  }
+}
+
+function updateBadges(data) {
+  document.getElementById('badge-all').textContent = data.total || 0;
+  document.getElementById('badge-sms').textContent = data.sms || 0;
+  document.getElementById('badge-notification').textContent = data.notifications || 0;
+  document.getElementById('badge-call').textContent = data.calls || 0;
+}
+
+function renderDevices(devices) {
+  const container = document.getElementById('devices-list');
+  if (!devices.length) {
+    container.innerHTML = '<div class="device-item" style="color:var(--text3);font-size:12px;">Aucun appareil</div>';
+    return;
+  }
+  const now = Date.now();
+  container.innerHTML = devices.map(d => {
+    const isRecent = (now - d.last_seen) < 5 * 60 * 1000;
+    const emoji = d.platform === 'ios' ? '🍎' : '🤖';
+    return `<div class="device-item">
+      <div class="device-dot ${isRecent ? '' : 'old'}"></div>
+      ${emoji} ${esc(d.name || d.id)}
+    </div>`;
+  }).join('');
+}
+
+// ─── Filter & Search ────────────────────────────────────────────────
+function setFilter(filter, el) {
+  currentFilter = filter;
+  document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
+  el.classList.add('active');
+  loadMessages();
+}
+
+let searchTimer;
+function onSearch(q) {
+  searchQuery = q;
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(loadMessages, 400);
+}
+
+// ─── WebSocket ──────────────────────────────────────────────────────
+function connectSocket() {
+  socket = io({ auth: { token: TOKEN } });
+
+  socket.on('connect', () => {
+    document.getElementById('status-dot').className = 'status-dot';
+    document.getElementById('status-text').textContent = 'En ligne';
+  });
+
+  socket.on('disconnect', () => {
+    document.getElementById('status-dot').className = 'status-dot offline';
+    document.getElementById('status-text').textContent = 'Hors ligne';
+  });
+
+  socket.on('new_messages', (msgs) => {
+    const now = new Date().toLocaleTimeString('fr-FR');
+    document.getElementById('status-sync').textContent = `Dernière sync: ${now}`;
+
+    msgs.forEach(m => {
+      if (currentFilter === 'all' || m.type === currentFilter) {
+        if (!searchQuery || matchesSearch(m, searchQuery)) {
+          allMessages.unshift(m);
+        }
+      }
+      // Stats
+      if (m.type === 'sms') stats.sms++;
+      else if (m.type === 'notification') stats.notifications++;
+      else if (m.type === 'call') stats.calls++;
+      stats.total++;
+
+      // Toast notification
+      showToast(m);
+    });
+
+    renderMessages();
+    updateBadges(stats);
+    document.getElementById('status-count').textContent = `${stats.total} message(s)`;
+  });
+
+  socket.on('device_connected', (device) => {
+    loadStats();
+  });
+}
+
+// ─── Toast ──────────────────────────────────────────────────────────
+let toastTimer;
+function showToast(m) {
+  if (document.hidden) return; // Ne pas afficher si l'onglet est caché
+
+  const name = m.sender_name || m.sender || m.app_name || 'Appareil';
+  const title = m.type === 'sms' ? `📩 SMS de ${name}`
+    : m.type === 'notification' ? `🔔 ${name}`
+    : `📞 Appel de ${name}`;
+  const body = (m.content || '').slice(0, 80);
+
+  document.getElementById('toast-title').textContent = title;
+  document.getElementById('toast-body').textContent = body || '';
+  const toast = document.getElementById('toast');
+  toast.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toast.classList.remove('show'), 4000);
+}
+
+// ─── Helpers ────────────────────────────────────────────────────────
+function matchesSearch(m, q) {
+  q = q.toLowerCase();
+  return (m.content||'').toLowerCase().includes(q) ||
+    (m.sender||'').toLowerCase().includes(q) ||
+    (m.sender_name||'').toLowerCase().includes(q) ||
+    (m.app_name||'').toLowerCase().includes(q);
+}
+
+function esc(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function formatTime(ts) {
+  const d = new Date(ts);
+  const now = new Date();
+  const isToday = d.toDateString() === now.toDateString();
+  const isYesterday = d.toDateString() === new Date(now - 86400000).toDateString();
+  if (isToday) return d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  if (isYesterday) return 'Hier ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
+}
+
+function formatDuration(secs) {
+  if (!secs) return '';
+  const m = Math.floor(secs / 60), s = secs % 60;
+  return m > 0 ? `${m}m${s.toString().padStart(2,'0')}s` : `${s}s`;
+}
+
+function appEmoji(name) {
+  const n = (name || '').toLowerCase();
+  if (n.includes('whatsapp')) return '💚';
+  if (n.includes('telegram')) return '✈️';
+  if (n.includes('gmail') || n.includes('mail')) return '📧';
+  if (n.includes('instagram')) return '📸';
+  if (n.includes('facebook')) return '👥';
+  if (n.includes('twitter') || n.includes('x.')) return '🐦';
+  if (n.includes('snapchat')) return '👻';
+  if (n.includes('tiktok')) return '🎵';
+  if (n.includes('youtube')) return '▶️';
+  if (n.includes('viber')) return '💜';
+  return '🔔';
+}
+</script>
+</body>
+</html>
