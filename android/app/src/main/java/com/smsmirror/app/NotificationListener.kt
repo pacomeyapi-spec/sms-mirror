@@ -10,11 +10,11 @@ import java.util.UUID
 
 /**
  * Capture toutes les notifications de l'appareil et les envoie au serveur.
- * NÃ©cessite l'accÃ¨s aux notifications dans les paramÃ¨tres systÃ¨me.
+ * Nécessite l'accès aux notifications dans les paramètres système.
  */
 class NotificationListener : NotificationListenerService() {
 
-    // Apps Ã  ignorer (Ã©viter les boucles et les notifs inutiles)
+    // Apps à ignorer (éviter les boucles et les notifs inutiles)
     private val IGNORED_PACKAGES = setOf(
         "com.smsmirror.app",
         "android",
@@ -74,7 +74,7 @@ class NotificationListener : NotificationListenerService() {
                     }
                 }
                 .onFailure {
-                Log.e("NotifListener", "Ãchec: ${it.message}")
+                Log.e("NotifListener", "Échec: ${it.message}")
                 PendingQueue.add(applicationContext, payload)
             }
         }
