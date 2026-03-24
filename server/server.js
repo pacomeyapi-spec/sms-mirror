@@ -28,7 +28,10 @@ console.log(`  Device Token : ${DEVICE_TOKEN}`);
 console.log('─────────────────────────────────────────────\n');
 
 // ── Base de données SQLite ───────────────────────────────────────────────────
-const db = new Database(process.env.DB_PATH || 'sms_mirror.db');
+const _dbPath = process.env.DB_PATH || 'sms_mirror.db';
+const _dbDir = require('path').dirname(_dbPath);
+if (_dbDir !== '.') require('fs').mkdirSync(_dbDir, { recursive: true });
+const db = new Database(_dbPath);
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS messages (
