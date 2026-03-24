@@ -757,29 +757,30 @@ let _senderPermUserId = null;
 async function openSenderPermModal(userId, username) {
   _senderPermUserId = userId;
   document.getElementById('perm-modal-title').textContent = 'Expéditeurs de ' + username;
-  const list = document.getElementById('perm-sender-list');
+  var list = document.getElementById('perm-sender-list');
   list.innerHTML = '<p>Chargement...</p>';
   document.getElementById('sender-perm-modal').style.display = 'flex';
   try {
-    const [sendersData, userSenders] = await Promise.all([
+    var results = await Promise.all([
       api('GET', '/api/admin/senders'),
       api('GET', '/api/admin/users/' + userId + '/senders')
     ]);
-    // sendersData = [{sender, pinned}], only show pinned ones
-    const pinned = (sendersData || []).filter(d => d.pinned).map(d => d.sender);
-    // userSenders = string[]
-    const authorized = new Set(userSenders || []);
-    if (pinned.length === 0) {
-      list.innerHTML = '<p>Aucun expéditeur épinglé.</p>';
-      return;
-    }
-    list.innerHTML = pinned.map(s => `
-      <label style="display:flex;align-items:center;gap:8px;padding:6px 0;cursor:pointer;">
-        <input type="checkbox" ${authorized.has(s) ? 'checked' : ''}
-          onchange="toggleSenderForUser(${userId}, '${s.replace(/'/g,'\\'')}', this.checked)">
-        <span>${s}</span>
-      </label>
-    `).join('');
+    var sendersData = results[0] || [];
+    var userSenders = results[1] || [];
+    var pinned = sendersData.filter(function(d){return d.pinned;}).map(function(d){return d.sender;});
+    var authorized = {};
+    userSenders.forEach(function(s){ authorized[s] = true; });
+    if (pinned.length === 0) { list.innerHTML = '<p>Aucun expéditeur épinglé.</p>'; return; }
+    var html = '';
+    pinned.forEach(function(sender) {
+      var checked = authorized[sender] ? 'checked' : '';
+      var safe = sender.replace(/\\/g,'\\\\notused').replace(/'/g,'\\x27');
+      html += '<label style="display:flex;align-items:center;gap:8px;padding:6px 0;cursor:pointer;">';
+      html += '<input type="checkbox" ' + checked + ' onchange="toggleSenderForUser(' + userId + ',\''+ safe +'\',this.checked)">';
+      html += '<span>' + sender + '</span>';
+      html += '</label>';
+    });
+    list.innerHTML = html;
   } catch(e) {
     list.innerHTML = '<p style="color:red">Erreur: ' + e.message + '</p>';
   }
