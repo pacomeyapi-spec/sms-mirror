@@ -267,35 +267,28 @@ app.post('/api/messages', requireDeviceAuth, (req, res) => {
 
 // ── Routes : Messages (dashboard) ───────────────────────────────────────────
 app.get('/api/messages', requireDashboardAuth, (req, res) => {
-  const user = req.session.user;
-  const { type, device, search, limit = 50, offset = 0 } = req.query;
-
-  let whereClauses = [];
-  let params = [];
-
-  if (type)   { whereClauses.push("type = ?");      params.push(type); }
-  if (device) { whereClauses.push("device_id = ?"); params.push(device); }
-  if (search) { whereClauses.push("(content LIKE ? OR address LIKE ? OR app_name LIKE ?)"); params.push('%'+search+'%','%'+search+'%','%'+search+'%'); }
-
-  // Pour les non-admins : filtrer par expéditeurs autorisés
-  if (user.role !== 'admin') {
-    const allowedSenders = db.prepare(`
-      SELECT usp.sender FROM user_sender_permissions usp
-      INNER JOIN pinned_senders ps ON ps.sender = usp.sender
-      WHERE usp.user_id = ?
-    `).all(user.id).map(r => r.sender);
-    if (allowedSenders.length === 0) return res.json([]);
-    const placeholders = allowedSenders.map(() => '?').join(',');
-    whereClauses.push(`COALESCE(app_name, address, phone_number, '') IN (${placeholders})`);
-    params.push(...allowedSenders);
+  try {
+    const user = req.session.user;
+    const { type, device, search, sender, limit=100, offset=0 } = req.query;
+    let whereClauses = [];
+    let params = [];
+    if (type)   { whereClauses.push("type = ?"); params.push(type); }
+    if (device) { whereClauses.push("device_id = ?"); params.push(device); }
+    if (search) { whereClauses.push("(content LIKE ? OR address LIKE ? OR app_name LIKE ?)"); params.push('%'+search+'%','%'+search+'%','%'+search+'%'); }
+    if (sender) { whereClauses.push("COALESCE(app_name, address, phone_number, '') = ?"); params.push(sender); }
+    if (user.role !== 'admin') {
+      const allowedSenders = db.prepare('SELECT usp.sender FROM user_sender_permissions usp INNER JOIN pinned_senders ps ON ps.sender = usp.sender WHERE usp.user_id = ?').all(user.id).map(r => r.sender);
+      if (allowedSenders.length === 0) return res.json([]);
+      const placeholders = allowedSenders.map(() => '?').join(',');
+      whereClauses.push("COALESCE(app_name, address, phone_number, '') IN (" + placeholders + ")");
+      params.push(...allowedSenders);
+    }
+    const where = whereClauses.length > 0 ? 'WHERE ' + whereClauses.join(' AND ') : '';
+    const rows = db.prepare('SELECT * FROM messages ' + where + ' ORDER BY timestamp DESC LIMIT ? OFFSET ?').all(...params, parseInt(limit), parseInt(offset));
+    res.json(rows);
+  } catch(e) {
+    res.status(500).json({ error: e.message });
   }
-
-  const where = whereClauses.length ? 'WHERE ' + whereClauses.join(' AND ') : '';
-  const rows = db.prepare(`
-    SELECT * FROM messages ${where}
-    ORDER BY timestamp DESC LIMIT ? OFFSET ?
-  `).all(...params, parseInt(limit), parseInt(offset));
-  res.json(rows);
 });
 
 app.get('/api/senders', requireDashboardAuth, (req, res) => {
