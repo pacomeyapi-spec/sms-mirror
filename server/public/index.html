@@ -599,8 +599,7 @@ function initSocket() {
           : (first.type === 'call' ? '📞 Appel entrant' : 'Nouvelle notification');
         const title = visibleMsgs.length === 1 ? sender : visibleMsgs.length + ' nouveaux messages';
         const body  = visibleMsgs.length === 1 ? preview : 'Dont un de ' + sender;
-        playNotifSound();
-        showDesktopNotif(title, body);
+         showDesktopNotif(title, body);
       }
     }
     // Mettre à jour les senders + titre onglet
