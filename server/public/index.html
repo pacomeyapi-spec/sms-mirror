@@ -9,7 +9,7 @@
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f0f2f5;color:#333}
 
-/* ââ Login âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ */
+/* ── Login ─────────────────────────────────────────────────────────────── */
 #login-view{display:flex;align-items:center;justify-content:center;min-height:100vh;background:#1565C0}
 .login-card{background:#fff;border-radius:16px;padding:40px 48px;width:380px;box-shadow:0 8px 32px rgba(0,0,0,.2);text-align:center}
 .login-card h1{color:#1565C0;font-size:1.5rem;margin-bottom:4px}
@@ -20,7 +20,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .login-card button:hover{background:#0d47a1}
 #login-error{color:#e53935;font-size:.85rem;margin-top:8px;min-height:20px}
 
-/* ââ Layout principal âââââââââââââââââââââââââââââââââââââââââââââââââââââ */
+/* ── Layout principal ───────────────────────────────────────────────────── */
 #app-view{display:none;flex-direction:column;height:100vh}
 header{background:#1565C0;color:#fff;padding:0 20px;height:54px;display:flex;align-items:center;gap:12px;flex-shrink:0}
 header .logo{font-weight:700;font-size:1.1rem;flex:1}
@@ -31,7 +31,7 @@ header .hbtn.active{background:rgba(255,255,255,.3);box-shadow:inset 0 0 0 1.5px
 
 .layout{display:flex;flex:1;overflow:hidden}
 
-/* ââ Sidebar ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ */
+/* ── Sidebar ────────────────────────────────────────────────────────────── */
 #sidebar{width:300px;background:#fff;border-right:1px solid #e0e0e0;display:flex;flex-direction:column;flex-shrink:0;overflow-y:auto}
 .sidebar-section-title{font-size:.7rem;font-weight:700;color:#9e9e9e;text-transform:uppercase;letter-spacing:.08em;padding:12px 16px 6px}
 .sender-item{display:flex;align-items:center;gap:12px;padding:10px 14px;cursor:pointer;transition:background .15s;border-bottom:1px solid #f5f5f5}
@@ -43,7 +43,7 @@ header .hbtn.active{background:rgba(255,255,255,.3);box-shadow:inset 0 0 0 1.5px
 .s-sub{font-size:.75rem;color:#888;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .s-badge{background:#1565C0;color:#fff;border-radius:10px;padding:2px 7px;font-size:.72rem;font-weight:700;flex-shrink:0}
 
-/* ââ Panel messages âââââââââââââââââââââââââââââââââââââââââââââââââââââââ */
+/* ── Panel messages ─────────────────────────────────────────────────────── */
 #msg-panel{flex:1;display:flex;flex-direction:column;overflow:hidden}
 #no-sender{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#aaa}
 #no-sender .bubble{font-size:3.5rem;margin-bottom:14px}
@@ -59,7 +59,7 @@ header .hbtn.active{background:rgba(255,255,255,.3);box-shadow:inset 0 0 0 1.5px
 #messages-list{flex:1;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:10px}
 #msg-empty{text-align:center;color:#aaa;padding:40px 0;display:none}
 
-/* ââ Cartes messages ââââââââââââââââââââââââââââââââââââââââââââââââââââââ */
+/* ── Cartes messages ────────────────────────────────────────────────────── */
 .msg-card{background:#fff;border-radius:10px;padding:14px 16px;border-left:4px solid #e0e0e0;box-shadow:0 1px 3px rgba(0,0,0,.06);transition:border-color .2s,background .2s}
 .msg-card.status-approuve{border-left-color:#43a047;background:#f1f8f1}
 .msg-card.status-pas_de_commande{border-left-color:#e53935;background:#fff5f5}
@@ -80,7 +80,7 @@ header .hbtn.active{background:rgba(255,255,255,.3);box-shadow:inset 0 0 0 1.5px
 .btn-pasCmd.active{background:#e53935;color:#fff}
 .btn-reset{background:#f5f5f5;color:#777;font-size:.73rem;padding:5px 8px}
 
-/* ââ Panel Admin ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ */
+/* ── Panel Admin ────────────────────────────────────────────────────────── */
 #admin-view{display:none;flex-direction:column;height:100vh}
 .admin-body{flex:1;overflow-y:auto;padding:24px}
 .admin-tabs{display:flex;gap:4px;padding:16px 24px 0;background:#fff;border-bottom:1px solid #e0e0e0}
@@ -123,19 +123,19 @@ header .hbtn.active{background:rgba(255,255,255,.3);box-shadow:inset 0 0 0 1.5px
 </head>
 <body>
 
-<!-- ââ VUE LOGIN ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ -->
+<!-- ── VUE LOGIN ──────────────────────────────────────────────────────────── -->
 <div id="login-view">
   <div class="login-card">
-    <h1>ð± YapsonPress V2</h1>
-    <p>Tableau de bord en temps rÃ©el</p>
-    <input type="text" id="login-username" placeholder="Nom d'utilisateur (admin par dÃ©faut)">
+    <h1>📱 YapsonPress V2</h1>
+    <p>Tableau de bord en temps réel</p>
+    <input type="text" id="login-username" placeholder="Nom d'utilisateur (admin par défaut)">
     <input type="password" id="login-password" placeholder="Mot de passe">
     <button id="login-btn">Connexion</button>
     <div id="login-error"></div>
   </div>
 </div>
 
-<!-- ââ VUE PRINCIPALE âââââââââââââââââââââââââââââââââââââââââââââââââââââââ -->
+<!-- ── VUE PRINCIPALE ─────────────────────────────────────────────────────── -->
 <div id="app-view">
   <header>
     <span class="logo"><svg xmlns="http://www.w3.org/2000/svg" width="110" height="33" viewBox="0 0 148 44" style="display:inline-block;vertical-align:middle">
@@ -147,16 +147,16 @@ header .hbtn.active{background:rgba(255,255,255,.3);box-shadow:inset 0 0 0 1.5px
   <text x="80" y="29" font-family="'Arial',sans-serif" font-weight="800" font-size="16" fill="white" letter-spacing="0.5">Yapson</text>
 </svg><span style="margin-left:6px;font-weight:700;font-size:14px;vertical-align:middle;color:#fff">V2</span></span>
     <button class="hbtn active" id="btn-dashboard" onclick="switchView('dashboard')">Dashboard</button>
-    <button class="hbtn" id="btn-admin" onclick="switchView('admin')" style="display:none">â Admin</button>
+    <button class="hbtn" id="btn-admin" onclick="switchView('admin')" style="display:none">⚙ Admin</button>
     <span id="unread-badge">0</span>
-    <button class="hbtn" onclick="location.reload()" title="RafraÃ®chir">ð RafraÃ®chir</button>
-    <button class="hbtn" onclick="logout()">DÃ©connexion</button>
+    <button class="hbtn" onclick="location.reload()" title="Rafraîchir">🔄 Rafraîchir</button>
+    <button class="hbtn" onclick="logout()">Déconnexion</button>
   </header>
   <div class="layout">
     <!-- Sidebar -->
     <nav id="sidebar">
       <div id="pinned-section">
-        <div class="sidebar-section-title">ð ÃpinglÃ©s</div>
+        <div class="sidebar-section-title">📌 Épinglés</div>
         <div id="pinned-list"></div>
       </div>
       <div id="others-section" style="display:none">
@@ -167,15 +167,15 @@ header .hbtn.active{background:rgba(255,255,255,.3);box-shadow:inset 0 0 0 1.5px
     <!-- Panel messages -->
     <div id="msg-panel">
       <div id="no-sender">
-        <div class="bubble">ð¬</div>
-        <p>Cliquez sur un expÃ©diteur pour voir ses messages</p>
+        <div class="bubble">💬</div>
+        <p>Cliquez sur un expéditeur pour voir ses messages</p>
       </div>
       <div id="sender-view">
         <div class="panel-header">
-          <h2 id="panel-title">â</h2>
+          <h2 id="panel-title">—</h2>
           <div class="search-box">
-            <span>ð</span>
-            <input type="text" id="search-input" placeholder="Rechercher dans les messagesâ¦">
+            <span>🔍</span>
+            <input type="text" id="search-input" placeholder="Rechercher dans les messages…">
           </div>
         </div>
         <div id="messages-list">
@@ -186,29 +186,29 @@ header .hbtn.active{background:rgba(255,255,255,.3);box-shadow:inset 0 0 0 1.5px
   </div>
 </div>
 
-<!-- ââ VUE ADMIN ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ -->
+<!-- ── VUE ADMIN ──────────────────────────────────────────────────────────── -->
 <div id="admin-view">
   <header>
-    <span class="logo">ð± YapsonPress V2</span>
+    <span class="logo">📱 YapsonPress V2</span>
     <button class="hbtn" id="btn-dashboard2" onclick="switchView('dashboard')">Dashboard</button>
-    <button class="hbtn active" id="btn-admin2" onclick="switchView('admin')">â Admin</button>
-    <button class="hbtn" onclick="location.reload()" title="RafraÃ®chir">ð RafraÃ®chir</button>
-    <button class="hbtn" onclick="logout()">DÃ©connexion</button>
+    <button class="hbtn active" id="btn-admin2" onclick="switchView('admin')">⚙ Admin</button>
+    <button class="hbtn" onclick="location.reload()" title="Rafraîchir">🔄 Rafraîchir</button>
+    <button class="hbtn" onclick="logout()">Déconnexion</button>
   </header>
   <div class="admin-tabs">
-    <button class="admin-tab active" onclick="switchAdminTab('devices')">ð± Appareils</button>
-    <button class="admin-tab" onclick="switchAdminTab('users')">ð¤ Utilisateurs</button>
+    <button class="admin-tab active" onclick="switchAdminTab('devices')">📱 Appareils</button>
+    <button class="admin-tab" onclick="switchAdminTab('users')">👤 Utilisateurs</button>
   
-    <button class="admin-tab" onclick="switchAdminTab('senders'); loadAdminSenders()">ð¨ ExpÃ©diteurs</button></div>
+    <button class="admin-tab" onclick="switchAdminTab('senders'); loadAdminSenders()">📨 Expéditeurs</button></div>
   <div class="admin-body">
 
     <!-- Onglet Appareils -->
     <div id="tab-devices" class="admin-section active">
       <div class="admin-card">
-        <h3>Appareils enregistrÃ©s</h3>
-        <p style="font-size:.83rem;color:#888;margin-bottom:14px">Chaque appareil Android oÃ¹ l'application est installÃ©e est listÃ© ci-dessous avec son numÃ©ro d'identification.</p>
+        <h3>Appareils enregistrés</h3>
+        <p style="font-size:.83rem;color:#888;margin-bottom:14px">Chaque appareil Android où l'application est installée est listé ci-dessous avec son numéro d'identification.</p>
         <table class="admin-table" id="devices-table">
-          <thead><tr><th>NÂ°</th><th>Nom affichÃ©</th><th>ID appareil</th><th>Plateforme</th><th>DerniÃ¨re activitÃ©</th><th>Actions</th></tr></thead>
+          <thead><tr><th>N°</th><th>Nom affiché</th><th>ID appareil</th><th>Plateforme</th><th>Dernière activité</th><th>Actions</th></tr></thead>
           <tbody id="devices-tbody"></tbody>
         </table>
       </div>
@@ -217,32 +217,32 @@ header .hbtn.active{background:rgba(255,255,255,.3);box-shadow:inset 0 0 0 1.5px
     <!-- Onglet Utilisateurs -->
     <div id="tab-users" class="admin-section">
       <div class="admin-card">
-        <h3>CrÃ©er un utilisateur</h3>
+        <h3>Créer un utilisateur</h3>
         <div class="form-row">
           <div><label>Nom d'utilisateur</label><input type="text" id="new-username" placeholder="ex: jean"></div>
           <div><label>Mot de passe</label><input type="password" id="new-password" placeholder="Mot de passe"></div>
-          <div><label>RÃ´le</label>
+          <div><label>Rôle</label>
             <select id="new-role">
               <option value="user">Utilisateur</option>
               <option value="admin">Administrateur</option>
             </select>
           </div>
-          <div style="padding-bottom:1px"><button class="btn-primary" onclick="createUser()">CrÃ©er</button></div>
+          <div style="padding-bottom:1px"><button class="btn-primary" onclick="createUser()">Créer</button></div>
         </div>
         <div id="create-user-error" style="color:#e53935;font-size:.82rem"></div>
       </div>
       <div class="admin-card">
         <h3>Utilisateurs existants</h3>
         <table class="admin-table">
-          <thead><tr><th>Nom</th><th>RÃ´le</th><th>Appareils autorisÃ©s</th><th>Actions</th></tr></thead>
+          <thead><tr><th>Nom</th><th>Rôle</th><th>Appareils autorisés</th><th>Actions</th></tr></thead>
           <tbody id="users-tbody"></tbody>
         </table>
       </div>
     </div>
-  <!-- Onglet ExpÃ©diteurs -->
+  <!-- Onglet Expéditeurs -->
   <div id="tab-senders" class="admin-section">
-    <h2>Gestion des ExpÃ©diteurs</h2>
-    <p style="color:#666;margin-bottom:16px;">Toutes les sources de messages dÃ©tectÃ©es. Ãpinglez celles que vous souhaitez rendre visibles aux utilisateurs.</p>
+    <h2>Gestion des Expéditeurs</h2>
+    <p style="color:#666;margin-bottom:16px;">Toutes les sources de messages détectées. Épinglez celles que vous souhaitez rendre visibles aux utilisateurs.</p>
     <div id="senders-list" style="display:grid;gap:8px;"></div>
   </div>
 
@@ -250,11 +250,11 @@ header .hbtn.active{background:rgba(255,255,255,.3);box-shadow:inset 0 0 0 1.5px
   </div>
 </div>
 
-<!-- ââ Modal permissions ââââââââââââââââââââââââââââââââââââââââââââââââââââ -->
+<!-- ── Modal permissions ──────────────────────────────────────────────────── -->
 <div class="perm-modal" id="perm-modal">
   <div class="perm-box">
-    <h3>ð AccÃ¨s appareils â <span id="perm-username"></span></h3>
-    <p style="font-size:.82rem;color:#888;margin-bottom:14px">Cochez les appareils auxquels cet utilisateur a accÃ¨s.</p>
+    <h3>🔒 Accès appareils — <span id="perm-username"></span></h3>
+    <p style="font-size:.82rem;color:#888;margin-bottom:14px">Cochez les appareils auxquels cet utilisateur a accès.</p>
     <div id="perm-devices-list"></div>
     <div class="perm-actions">
       <button class="hbtn" style="background:#f0f0f0;color:#333;border-radius:7px;padding:8px 16px" onclick="closePermModal()">Annuler</button>
@@ -266,7 +266,7 @@ header .hbtn.active{background:rgba(255,255,255,.3);box-shadow:inset 0 0 0 1.5px
 <div class="toast" id="toast"></div>
 
 <script>
-// ââ Ãtat global ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ── État global ──────────────────────────────────────────────────────────────
 let token        = localStorage.getItem('sm_token')    || '';
 let userRole     = localStorage.getItem('sm_role')     || '';
 let userName     = localStorage.getItem('sm_username') || '';
@@ -294,7 +294,7 @@ function fmtDate(ts) {
   return pad(d.getDate())+'/'+pad(d.getMonth()+1)+'/'+d.getFullYear()+' '+pad(d.getHours())+':'+pad(d.getMinutes());
 }
 
-// ââ API helper âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ── API helper ───────────────────────────────────────────────────────────────
 async function api(method, url, body) {
   const r = await fetch(url, {
     method,
@@ -306,7 +306,7 @@ async function api(method, url, body) {
   return data;
 }
 
-// ââ Toast ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ── Toast ────────────────────────────────────────────────────────────────────
 function showToast(msg, ok=true) {
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -315,7 +315,7 @@ function showToast(msg, ok=true) {
   setTimeout(() => t.classList.remove('show'), 2800);
 }
 
-// ââ Auth âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ── Auth ─────────────────────────────────────────────────────────────────────
 async function login() {
   const username = document.getElementById('login-username').value.trim();
   const password = document.getElementById('login-password').value.trim();
@@ -344,7 +344,7 @@ function logout() {
   location.reload();
 }
 
-// ââ Vues âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ── Vues ─────────────────────────────────────────────────────────────────────
 function switchView(view) {
   document.getElementById('app-view').style.display   = view==='dashboard' ? 'flex'  : 'none';
   document.getElementById('admin-view').style.display = view==='admin'     ? 'flex'  : 'none';
@@ -379,7 +379,7 @@ function showDashboard() {
   }
 }
 
-// ââ Sidebar ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ── Sidebar ──────────────────────────────────────────────────────────────────
 async function loadSenders() {
   try {
     allSenders = await api('GET','/api/senders');
@@ -392,7 +392,7 @@ function renderSidebar() {
   const pinned = allSenders.filter(s => PINNED.includes(s.display_name));
   const others = allSenders.filter(s => !PINNED.includes(s.display_name));
 
-  // Ajouter les Ã©pinglÃ©s absents
+  // Ajouter les épinglés absents
   const pinnedFull = PINNED.map(name => {
     const found = pinned.find(s=>s.display_name===name);
     return found || { display_name:name, count:0, unread:0, last_ts:0 };
@@ -408,7 +408,7 @@ function senderHTML(s) {
     ? `<span class="s-badge">${s.unread}</span>`
     : '';
   const sub = s.last_ts
-    ? fmtDate(s.last_ts) + (s.count ? ` Â· ${s.count} msg` : '')
+    ? fmtDate(s.last_ts) + (s.count ? ` · ${s.count} msg` : '')
     : 'Aucun message';
   const isActive = currentSender === s.display_name ? ' active' : '';
   return `<div class="sender-item${isActive}" onclick="selectSender('${escHtml(s.display_name)}')">
@@ -432,7 +432,7 @@ function updateUnreadBadge() {
   else          { el.style.display='none'; }
 }
 
-// ââ SÃ©lection expÃ©diteur âââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ── Sélection expéditeur ─────────────────────────────────────────────────────
 async function selectSender(name) {
   currentSender = name;
   document.getElementById('search-input').value = '';
@@ -458,7 +458,7 @@ async function fetchMessages(sender) {
   } catch(e) { console.error(e); }
 }
 
-// ââ Recherche dans messages âââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ── Recherche dans messages ───────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('search-input').addEventListener('input', e => {
     renderMessages(e.target.value.toLowerCase().trim());
@@ -468,7 +468,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 
-// ââ Rendu messages âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ── Rendu messages ───────────────────────────────────────────────────────────
 function renderMessages(query='') {
   const list = document.getElementById('messages-list');
   const empty = document.getElementById('msg-empty');
@@ -482,7 +482,7 @@ function renderMessages(query='') {
       )
     : allMessages;
 
-  // Vider sauf l'Ã©lÃ©ment empty
+  // Vider sauf l'élément empty
   list.querySelectorAll('.msg-card').forEach(c=>c.remove());
   empty.style.display = filtered.length === 0 ? '' : 'none';
 
@@ -511,10 +511,10 @@ function buildCard(m) {
     <div class="msg-content${contentCls}">${escHtml(contentTxt)}</div>
     <div class="card-actions">
       <button class="btn-status btn-approuve ${m.status==='approuve'?'active':''}"
-        onclick="setStatus('${m.id}','approuve',this)">â ApprouvÃ©</button>
+        onclick="setStatus('${m.id}','approuve',this)">✔ Approuvé</button>
       <button class="btn-status btn-pasCmd ${m.status==='pas_de_commande'?'active':''}"
-        onclick="setStatus('${m.id}','pas_de_commande',this)">â Pas de commande</button>
-      ${m.status ? `<button class="btn-status btn-reset" onclick="setStatus('${m.id}',null,this)">âº</button>` : ''}
+        onclick="setStatus('${m.id}','pas_de_commande',this)">✘ Pas de commande</button>
+      ${m.status ? `<button class="btn-status btn-reset" onclick="setStatus('${m.id}',null,this)">↺</button>` : ''}
     </div>`;
   return div;
 }
@@ -522,9 +522,9 @@ function buildCard(m) {
 async function setStatus(id, status, btn) {
   try {
     await api('PATCH', `/api/messages/${id}/status`, { status });
-    // Mettre Ã  jour localement
+    // Mettre à jour localement
     allMessages = allMessages.map(m => m.id===id ? {...m, status} : m);
-    // Mettre Ã  jour la carte
+    // Mettre à jour la carte
     const card = document.getElementById('card-'+id);
     if(card) {
       const newCard = buildCard(allMessages.find(m=>m.id===id));
@@ -533,14 +533,14 @@ async function setStatus(id, status, btn) {
   } catch(e) { showToast('Erreur: '+e.message, false); }
 }
 
-// ââ Socket.io ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ── Socket.io ────────────────────────────────────────────────────────────────
 function initSocket() {
   socket = io({ auth: { token } });
 
   socket.on('new_messages', (msgs) => {
-    // Mettre Ã  jour les senders
+    // Mettre à jour les senders
     loadSenders();
-    // Si le sender actuel est concernÃ©, ajouter en haut de la liste
+    // Si le sender actuel est concerné, ajouter en haut de la liste
     if(currentSender) {
       const relevant = msgs.filter(m => {
         const dn = m.sender_name || m.sender || m.app_name || 'Inconnu';
@@ -572,42 +572,42 @@ function initSocket() {
   });
 }
 
-// ââ Admin â Appareils âââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ── Admin – Appareils ─────────────────────────────────────────────────────────
 async function adminLoadDevices() {
   try {
     adminDevices = await api('GET','/api/admin/devices');
     const tbody = document.getElementById('devices-tbody');
     if(!adminDevices.length) {
-      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#aaa;padding:24px">Aucun appareil enregistrÃ©</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#aaa;padding:24px">Aucun appareil enregistré</td></tr>';
       return;
     }
     tbody.innerHTML = adminDevices.map(d => `
       <tr id="dev-row-${d.id.replace(/[^a-z0-9]/gi,'_')}">
-        <td><strong>#${d.number||'â'}</strong></td>
+        <td><strong>#${d.number||'—'}</strong></td>
         <td id="dev-name-${d.id.replace(/[^a-z0-9]/gi,'_')}">${escHtml(d.display_name||d.name||'Appareil')}</td>
         <td style="font-family:monospace;font-size:.78rem;color:#888">${escHtml(d.id)}</td>
         <td>${escHtml(d.platform||'android')}</td>
-        <td>${d.last_seen ? fmtDate(d.last_seen) : 'â'}</td>
+        <td>${d.last_seen ? fmtDate(d.last_seen) : '—'}</td>
         <td>
-          <button class="btn-primary btn-sm" onclick="editDevice('${escHtml(d.id)}','${escHtml(d.display_name||d.name||'')}',${d.number||0})">â Renommer</button>
+          <button class="btn-primary btn-sm" onclick="editDevice('${escHtml(d.id)}','${escHtml(d.display_name||d.name||'')}',${d.number||0})">✏ Renommer</button>
         </td>
       </tr>`).join('');
   } catch(e) { console.error(e); }
 }
 
 function editDevice(id, currentName, currentNum) {
-  const name = prompt('Nom affichÃ© pour cet appareil :', currentName);
+  const name = prompt('Nom affiché pour cet appareil :', currentName);
   if(name === null) return;
-  const num  = prompt('NumÃ©ro de cet appareil :', currentNum);
+  const num  = prompt('Numéro de cet appareil :', currentNum);
   if(num === null) return;
   api('PUT',`/api/admin/devices/${encodeURIComponent(id)}`,{
     display_name: name.trim(),
     number: parseInt(num)||currentNum
-  }).then(()=>{ showToast('Appareil mis Ã  jour'); adminLoadDevices(); })
+  }).then(()=>{ showToast('Appareil mis à jour'); adminLoadDevices(); })
     .catch(e=>showToast('Erreur: '+e.message, false));
 }
 
-// ââ Admin â Utilisateurs ââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ── Admin – Utilisateurs ──────────────────────────────────────────────────────
 async function adminLoadUsers() {
   try {
     const users = await api('GET','/api/admin/users');
@@ -619,17 +619,17 @@ async function adminLoadUsers() {
     tbody.innerHTML = users.map(u => {
       const chips = (u.device_ids||[]).map(did => {
         const dev = adminDevices.find(d=>d.id===did);
-        const lbl = dev ? (dev.display_name||dev.name||('Appareil #'+dev.number)) : did.slice(0,10)+'â¦';
+        const lbl = dev ? (dev.display_name||dev.name||('Appareil #'+dev.number)) : did.slice(0,10)+'…';
         return `<span class="device-chip">${escHtml(lbl)}</span>`;
       }).join('');
       return `<tr>
         <td><strong>${escHtml(u.username)}</strong></td>
         <td><span class="role-badge role-${u.role}">${u.role==='admin'?'Admin':'Utilisateur'}</span></td>
-        <td>${u.role==='admin' ? '<em style="color:#aaa">Tous les appareils</em>' : (chips||'<em style="color:#aaa">Aucun accÃ¨s</em>')}<div class="device-chips" style="margin-top:4px"></div></td>
+        <td>${u.role==='admin' ? '<em style="color:#aaa">Tous les appareils</em>' : (chips||'<em style="color:#aaa">Aucun accès</em>')}<div class="device-chips" style="margin-top:4px"></div></td>
         <td style="display:flex;gap:6px;flex-wrap:wrap">
-          ${`<button class="btn-sm ${u.is_active===0?'btn-danger':'btn-success'}" onclick="toggleUserAccess(${u.id})" title="${u.is_active===0?'Compte bloquÃ© â cliquer pour rÃ©activer':'Compte actif â cliquer pour bloquer'}">${u.is_active===0?'â BloquÃ©':'â Actif'}</button>`}${u.role!=='admin' ? `<button class="btn-primary btn-sm" onclick="openPermModal(${u.id},'${escHtml(u.username)}')">ð± Appareils</button> ${u.role!=='admin' ? `<button class="btn-warning btn-sm" onclick="openSenderPermModal(${u.id},'${escHtml(u.username)}')">ð¬ ExpÃ©diteurs</button>` : ''}` : ''}
-          <button class="btn-primary btn-sm" onclick="changePassword(${u.id},'${escHtml(u.username)}')">ð MDP</button>
-          <button class="btn-danger btn-sm" onclick="deleteUser(${u.id},'${escHtml(u.username)}')">â</button>
+          ${`<button class="btn-sm ${u.is_active===0?'btn-danger':'btn-success'}" onclick="toggleUserAccess(${u.id})" title="${u.is_active===0?'Compte bloqué – cliquer pour réactiver':'Compte actif – cliquer pour bloquer'}">${u.is_active===0?'✗ Bloqué':'✓ Actif'}</button>`}${u.role!=='admin' ? `<button class="btn-primary btn-sm" onclick="openPermModal(${u.id},'${escHtml(u.username)}')">📱 Appareils</button> ${u.role!=='admin' ? `<button class="btn-warning btn-sm" onclick="openSenderPermModal(${u.id},'${escHtml(u.username)}')">📬 Expéditeurs</button>` : ''}` : ''}
+          <button class="btn-primary btn-sm" onclick="changePassword(${u.id},'${escHtml(u.username)}')">🔑 MDP</button>
+          <button class="btn-danger btn-sm" onclick="deleteUser(${u.id},'${escHtml(u.username)}')">✕</button>
         </td>
       </tr>`;
     }).join('');
@@ -647,7 +647,7 @@ async function createUser() {
     await api('POST','/api/admin/users',{username,password,role});
     document.getElementById('new-username').value = '';
     document.getElementById('new-password').value = '';
-    showToast('Utilisateur crÃ©Ã© avec succÃ¨s');
+    showToast('Utilisateur créé avec succès');
     adminLoadUsers();
   } catch(e) { errEl.textContent = e.message; }
 }
@@ -656,7 +656,7 @@ async function deleteUser(id, name) {
   if(!confirm(`Supprimer l'utilisateur "${name}" ?`)) return;
   try {
     await api('DELETE',`/api/admin/users/${id}`);
-    showToast('Utilisateur supprimÃ©');
+    showToast('Utilisateur supprimé');
     adminLoadUsers();
   } catch(e) { showToast('Erreur: '+e.message, false); }
 }
@@ -666,11 +666,11 @@ async function changePassword(id, name) {
   if(!pwd) return;
   try {
     await api('PUT',`/api/admin/users/${id}/password`,{password:pwd});
-    showToast('Mot de passe modifiÃ©');
+    showToast('Mot de passe modifié');
   } catch(e) { showToast('Erreur: '+e.message, false); }
 }
 
-// ââ Modal permissions âââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ── Modal permissions ─────────────────────────────────────────────────────────
 async function openPermModal(userId, username) {
     permUserId = userId;
     document.getElementById('perm-username').textContent = username;
@@ -710,13 +710,13 @@ async function savePermissions() {
   const device_ids = checked.map(c=>c.value);
   try {
     await api('PUT',`/api/admin/users/${permUserId}/permissions`,{device_ids});
-    showToast('Permissions enregistrÃ©es');
+    showToast('Permissions enregistrées');
     closePermModal();
     adminLoadUsers();
   } catch(e) { showToast('Erreur: '+e.message, false); }
 }
 
-// ââ Initialisation ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ── Initialisation ────────────────────────────────────────────────────────────
 if(token) {
   showDashboard();
 } else {
@@ -724,7 +724,7 @@ if(token) {
 }
 document.getElementById('login-btn').addEventListener('click', login);
 
-// ââ Toggle User Access ââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ── Toggle User Access ────────────────────────────────────────────────────
 async function toggleUserAccess(userId) {
   try {
     const res = await fetch('/api/admin/users/' + userId + '/access', { method: 'PATCH', headers: { 'Authorization': 'Bearer ' + token } });
@@ -735,7 +735,7 @@ async function toggleUserAccess(userId) {
   }
 }
 
-// ââ Admin Senders Management ââââââââââââââââââââââââââââââââââââââââââââââ
+// ── Admin Senders Management ──────────────────────────────────────────────
 async function loadAdminSenders() {
   try {
     const data = await api('GET', '/api/admin/senders');
@@ -752,7 +752,7 @@ function renderAdminSenders(senders, pinnedSet) {
   var list = document.getElementById('senders-list');
   if (!list) return;
   if (!senders || senders.length === 0) {
-    list.innerHTML = '<p>Aucun expÃ©diteur trouvÃ©.</p>';
+    list.innerHTML = '<p>Aucun expéditeur trouvé.</p>';
     return;
   }
   var html = '';
@@ -762,9 +762,9 @@ function renderAdminSenders(senders, pinnedSet) {
     html += '<span style="font-weight:500;">' + sender + '</span>';
     html += '<div style="display:flex;gap:8px;">';
     if (isPinned) {
-      html += '<button class="btn btn-warning btn-sm" onclick="togglePinSender(\'' + sender.replace(/\\/g,'\\\\notused').replace(/'/g,'\\x27') + '\',true)">ð ÃpinglÃ©</button>';
+      html += '<button class="btn btn-warning btn-sm" onclick="togglePinSender(\'' + sender.replace(/\\/g,'\\\\notused').replace(/'/g,'\\x27') + '\',true)">📌 Épinglé</button>';
     } else {
-      html += '<button class="btn btn-sm" onclick="togglePinSender(\'' + sender.replace(/\\/g,'\\\\notused').replace(/'/g,'\\x27') + '\',false)">â Ãpingler</button>';
+      html += '<button class="btn btn-sm" onclick="togglePinSender(\'' + sender.replace(/\\/g,'\\\\notused').replace(/'/g,'\\x27') + '\',false)">⊕ Épingler</button>';
     }
     html += '</div>';
     html += '</div>';
@@ -785,12 +785,12 @@ async function togglePinSender(sender, isPinned) {
   }
 }
 
-// ââ Sender Permissions Per User âââââââââââââââââââââââââââââââââââââââââââ
+// ── Sender Permissions Per User ───────────────────────────────────────────
 let _senderPermUserId = null;
 
 async function openSenderPermModal(userId, username) {
   _senderPermUserId = userId;
-  document.getElementById('perm-modal-title').textContent = 'ExpÃ©diteurs de ' + username;
+  document.getElementById('perm-modal-title').textContent = 'Expéditeurs de ' + username;
   var list = document.getElementById('perm-sender-list');
   list.innerHTML = '<p>Chargement...</p>';
   document.getElementById('sender-perm-modal').style.display = 'flex';
@@ -804,7 +804,7 @@ async function openSenderPermModal(userId, username) {
     var pinned = sendersData.filter(function(d){return d.pinned;}).map(function(d){return d.sender;});
     var authorized = {};
     userSenders.forEach(function(s){ authorized[s] = true; });
-    if (pinned.length === 0) { list.innerHTML = '<p>Aucun expÃ©diteur Ã©pinglÃ©.</p>'; return; }
+    if (pinned.length === 0) { list.innerHTML = '<p>Aucun expéditeur épinglé.</p>'; return; }
     var html = '';
     pinned.forEach(function(sender) {
       var checked = authorized[sender] ? 'checked' : '';
@@ -840,7 +840,7 @@ async function toggleSenderForUser(userId, sender, grant) {
       <h3 id="perm-modal-title" style="margin:0;font-size:1.1rem;"></h3>
       <button onclick="document.getElementById('sender-perm-modal').style.display='none'" style="background:none;border:none;color:#aaa;font-size:1.4rem;cursor:pointer;">&times;</button>
     </div>
-    <p style="font-size:0.85rem;color:#aaa;margin-bottom:12px;">Cochez les expÃ©diteurs auxquels cet utilisateur a accÃ¨s :</p>
+    <p style="font-size:0.85rem;color:#aaa;margin-bottom:12px;">Cochez les expéditeurs auxquels cet utilisateur a accès :</p>
     <div id="perm-sender-list"></div>
   </div>
 </div>
