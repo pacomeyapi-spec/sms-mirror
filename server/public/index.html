@@ -1,3 +1,44 @@
+  // ── Notifications ────────────────────────────────────────────────────────────────────────────────────────────────────
+  function requestNotifPermission() {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  }
+
+  function playNotifSound() {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.15);
+      gain.gain.setValueAtTime(0.25, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.45);
+    } catch(e) {}
+  }
+
+  function showDesktopNotif(title, body) {
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    const n = new Notification(title, {
+      body,
+      icon: '/favicon.ico',
+      tag: 'yapson-new-msg',
+      renotify: true,
+    });
+    n.onclick = () => { window.focus(); n.close(); };
+    setTimeout(() => n.close(), 6000);
+  }
+
+  function updateTabTitle() {
+    const total = allSenders.reduce((sum, s) => sum + (s.unread || 0), 0);
+    document.title = total > 0 ? '(' + total + ') YapsonPress V2' : 'YapsonPress V2';
+  }
+
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -365,6 +406,7 @@ function switchAdminTab(tab) {
   if (tab === 'users') typeof adminLoadUsers === 'function' && adminLoadUsers();
 }
 function showDashboard() {
+  requestNotifPermission();
   document.getElementById('login-view').style.display = 'none';
   document.getElementById('app-view').style.display   = 'flex';
   if(userRole==='admin') {
@@ -372,7 +414,7 @@ function showDashboard() {
     document.getElementById('btn-admin2').style.display = '';
   }
   initSocket();
-  loadSenders();
+  loadSenders().then(updateTabTitle).catch(() => {});
   // Auto-switch to admin panel if URL is /admin
   if(window.location.pathname === '/admin' && userRole === 'admin') {
     setTimeout(() => switchView('admin'), 100);
@@ -533,13 +575,67 @@ async function setStatus(id, status, btn) {
   } catch(e) { showToast('Erreur: '+e.message, false); }
 }
 
+// ── Notifications ─────────────────────────────────────────────────────────────────────────────
+  function requestNotifPermission() {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  }
+
+  function playNotifSound() {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.15);
+      gain.gain.setValueAtTime(0.25, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.45);
+    } catch(e) {}
+  }
+
+  function showDesktopNotif(title, body) {
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    const n = new Notification(title, {
+      body,
+      icon: '/favicon.ico',
+      tag: 'yapson-new-msg',
+      renotify: true,
+    });
+    n.onclick = () => { window.focus(); n.close(); };
+    setTimeout(() => n.close(), 6000);
+  }
+
+  function updateTabTitle() {
+    const total = allSenders.reduce((sum, s) => sum + (s.unread || 0), 0);
+    document.title = total > 0 ? '(' + total + ') YapsonPress V2' : 'YapsonPress V2';
+  }
+
+
 // ── Socket.io ────────────────────────────────────────────────────────────────
 function initSocket() {
   socket = io({ auth: { token } });
 
   socket.on('new_messages', (msgs) => {
-    // Mettre à jour les senders
-    loadSenders();
+    // Notifier l'utilisateur dès l'arrivée de nouveaux messages
+    if (msgs && msgs.length > 0) {
+      const first = msgs[0];
+      const sender = first.sender_name || first.sender || first.app_name || 'Inconnu';
+      const preview = first.content
+        ? first.content.slice(0, 80)
+        : (first.type === 'call' ? '📞 Appel entrant' : 'Nouvelle notification');
+      const title = msgs.length === 1 ? sender : msgs.length + ' nouveaux messages';
+      const body  = msgs.length === 1 ? preview : 'Dont un de ' + sender;
+      playNotifSound();
+      showDesktopNotif(title, body);
+    }
+    // Mettre à jour les senders + titre onglet
+    loadSenders().then(updateTabTitle).catch(() => {});
     // Si le sender actuel est concerné, ajouter en haut de la liste
     if(currentSender) {
       const relevant = msgs.filter(m => {
