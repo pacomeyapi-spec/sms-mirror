@@ -233,6 +233,7 @@ header .hbtn.active{background:rgba(255,255,255,.3);box-shadow:inset 0 0 0 1.5px
       </div>
       <div class="admin-card">
         <h3>Utilisateurs existants</h3>
+        <input type="text" id="user-search" placeholder="🔍 Rechercher un utilisateur..." oninput="filterAdminUsers(this.value)" style="width:100%;padding:8px 12px;margin-bottom:10px;background:#1a1a2e;border:1px solid #333;border-radius:6px;color:#fff;font-size:.9rem;outline:none;box-sizing:border-box;">
         <table class="admin-table">
           <thead><tr><th>Nom</th><th>Rôle</th><th>Appareils autorisés</th><th>Actions</th></tr></thead>
           <tbody id="users-tbody"></tbody>
@@ -657,6 +658,13 @@ function editDevice(id, currentName, currentNum) {
 }
 
 // ── Admin – Utilisateurs ──────────────────────────────────────────────────────
+function filterAdminUsers(term) {
+  const q = (term || '').toLowerCase().trim();
+  document.querySelectorAll('#users-tbody tr').forEach(tr => {
+    const name = (tr.querySelector('td') ? tr.querySelector('td').textContent : '').toLowerCase();
+    tr.style.display = !q || name.includes(q) ? '' : 'none';
+  });
+}
 async function adminLoadUsers() {
   try {
     const users = await api('GET','/api/admin/users');
