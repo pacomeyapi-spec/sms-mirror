@@ -308,7 +308,15 @@ app.get('/api/senders', requireDashboardAuth, (req, res) => {
   let params = {};
   ({ query, params } = addDeviceFilter(query, params, allowed));
   query += ` GROUP BY COALESCE(sender_name,sender,app_name,'Inconnu') ORDER BY last_ts DESC`;
-  res.json(db.prepare(query).all(params));
+  let rows = db.prepare(query).all(params);
+  if (req.user.role !== 'admin') {
+    const allowedSenders = new Set(
+      db.prepare('SELECT sender FROM user_sender_permissions WHERE user_id = ?')
+        .all(req.user.id).map(r => r.sender)
+    );
+    rows = rows.filter(r => allowedSenders.has(r.display_name));
+  }
+  res.json(rows);
 });
 
 app.patch('/api/messages/:id/status', requireDashboardAuth, (req, res) => {
