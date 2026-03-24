@@ -738,6 +738,30 @@ async function loadAdminSenders() {
     if (el) el.innerHTML = '<p style="color:red">Erreur: ' + e.message + '</p>';
   }
 }
+function renderAdminSenders(senders, pinnedSet) {
+  var list = document.getElementById('senders-list');
+  if (!list) return;
+  if (!senders || senders.length === 0) {
+    list.innerHTML = '<p>Aucun expéditeur trouvé.</p>';
+    return;
+  }
+  var html = '';
+  senders.forEach(function(sender) {
+    var isPinned = pinnedSet.has(sender);
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#1e1e2e;border-radius:8px;gap:10px;">';
+    html += '<span style="font-weight:500;">' + sender + '</span>';
+    html += '<div style="display:flex;gap:8px;">';
+    if (isPinned) {
+      html += '<button class="btn btn-warning btn-sm" onclick="togglePinSender(\'' + sender.replace(/\\/g,'\\\\notused').replace(/'/g,'\\x27') + '\',true)">📌 Épinglé</button>';
+    } else {
+      html += '<button class="btn btn-sm" onclick="togglePinSender(\'' + sender.replace(/\\/g,'\\\\notused').replace(/'/g,'\\x27') + '\',false)">⊕ Épingler</button>';
+    }
+    html += '</div>';
+    html += '</div>';
+  });
+  list.innerHTML = html;
+}
+
 async function togglePinSender(sender, isPinned) {
   try {
     if (isPinned) {
