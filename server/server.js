@@ -274,13 +274,16 @@ app.get('/api/messages', requireDashboardAuth, (req, res) => {
     let params = [];
     if (type)   { whereClauses.push("type = ?"); params.push(type); }
     if (device) { whereClauses.push("device_id = ?"); params.push(device); }
-    if (search) { whereClauses.push("(content LIKE ? OR sender LIKE ? OR app_name LIKE ?)"); params.push('%'+search+'%','%'+search+'%','%'+search+'%'); }
-    if (sender) { whereClauses.push("sender = ?"); params.push(sender); }
+    if (search) { whereClauses.push("(content LIKE ? OR sender LIKE ? OR app_name LIKE ? OR sender_name LIKE ?)"); params.push('%'+search+'%','%'+search+'%','%'+search+'%','%'+search+'%'); }
+    if (sender) {
+      whereClauses.push("COALESCE(sender_name, sender, app_name, '') = ?");
+      params.push(sender);
+    }
     if (user.role !== 'admin') {
       const allowedSenders = db.prepare('SELECT usp.sender FROM user_sender_permissions usp INNER JOIN pinned_senders ps ON ps.sender = usp.sender WHERE usp.user_id = ?').all(user.id).map(r => r.sender);
       if (allowedSenders.length === 0) return res.json([]);
       const placeholders = allowedSenders.map(() => '?').join(',');
-      whereClauses.push("sender IN (" + placeholders + ")");
+      whereClauses.push("COALESCE(sender_name, sender, app_name, '') IN (" + placeholders + ")");
       params.push(...allowedSenders);
     }
     const where = whereClauses.length > 0 ? 'WHERE ' + whereClauses.join(' AND ') : '';
