@@ -268,7 +268,7 @@ app.post('/api/messages', requireDeviceAuth, (req, res) => {
 // ── Routes : Messages (dashboard) ───────────────────────────────────────────
 app.get('/api/messages', requireDashboardAuth, (req, res) => {
   try {
-    const user = req.session.user;
+    const user = req.user;
     const { type, device, search, sender, limit=100, offset=0 } = req.query;
     let whereClauses = [];
     let params = [];
