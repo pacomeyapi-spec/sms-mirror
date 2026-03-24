@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SMS Mirror</title>
+<title>YapsonPress V2</title>
 <script src="/socket.io/socket.io.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -96,7 +96,7 @@ header .hbtn.active{background:rgba(255,255,255,.3);box-shadow:inset 0 0 0 1.5px
 .form-row input:focus,.form-row select:focus{border-color:#1565C0}
 .btn-primary{background:#1565C0;color:#fff;border:none;border-radius:7px;padding:9px 18px;font-size:.88rem;font-weight:600;cursor:pointer;transition:background .2s}
 .btn-primary:hover{background:#0d47a1}
-.btn-danger{background:#e53935;color:#fff;border:none;border-radius:7px;padding:7px 14px;font-size:.8rem;font-weight:600;cursor:pointer;transition:background .2s}
+.btn-danger{background:#e53935;color:#fff;border:none;border-radius:7px;padding:7px 14px;font-size:.8rem;font-weight:600;cursor:pointer;transition:background .2s}.btn-success{background:#2e7d32;color:#fff;border:none;border-radius:7px;padding:7px 14px;cursor:pointer}.btn-warning{background:#f57c00;color:#fff;border:none;border-radius:7px;padding:7px 14px;cursor:pointer}
 .btn-danger:hover{background:#c62828}
 .btn-sm{padding:6px 12px;font-size:.8rem}
 .admin-table{width:100%;border-collapse:collapse}
@@ -126,7 +126,7 @@ header .hbtn.active{background:rgba(255,255,255,.3);box-shadow:inset 0 0 0 1.5px
 <!-- ── VUE LOGIN ──────────────────────────────────────────────────────────── -->
 <div id="login-view">
   <div class="login-card">
-    <h1>📱 SMS Mirror</h1>
+    <h1>📱 YapsonPress V2</h1>
     <p>Tableau de bord en temps réel</p>
     <input type="text" id="login-username" placeholder="Nom d'utilisateur (admin par défaut)">
     <input type="password" id="login-password" placeholder="Mot de passe">
@@ -138,7 +138,14 @@ header .hbtn.active{background:rgba(255,255,255,.3);box-shadow:inset 0 0 0 1.5px
 <!-- ── VUE PRINCIPALE ─────────────────────────────────────────────────────── -->
 <div id="app-view">
   <header>
-    <span class="logo">📱 SMS Mirror</span>
+    <span class="logo"><svg xmlns="http://www.w3.org/2000/svg" width="148" height="44" viewBox="0 0 148 44" style="display:inline-block;vertical-align:middle">
+  <rect width="148" height="44" rx="8" fill="#1a2035"/>
+  <g transform="translate(16,28) rotate(-32)"><rect x="-20" y="-8" width="40" height="16" rx="8" fill="#F07C3E"/></g>
+  <g transform="translate(30,18) rotate(-32)"><rect x="-20" y="-8" width="40" height="16" rx="8" fill="#F05A7A" opacity="0.95"/></g>
+  <g transform="translate(48,26) rotate(-32)"><rect x="-20" y="-8" width="40" height="16" rx="8" fill="#4472F4"/></g>
+  <g transform="translate(62,16) rotate(-32)"><rect x="-20" y="-8" width="40" height="16" rx="8" fill="#48C8F0"/></g>
+  <text x="80" y="29" font-family="'Arial',sans-serif" font-weight="800" font-size="16" fill="white" letter-spacing="0.5">Yapson</text>
+</svg><span style="margin-left:6px;font-weight:700;font-size:14px;vertical-align:middle;color:#fff">V2</span></span>
     <button class="hbtn active" id="btn-dashboard" onclick="switchView('dashboard')">Dashboard</button>
     <button class="hbtn" id="btn-admin" onclick="switchView('admin')" style="display:none">⚙ Admin</button>
     <span id="unread-badge">0</span>
@@ -182,7 +189,7 @@ header .hbtn.active{background:rgba(255,255,255,.3);box-shadow:inset 0 0 0 1.5px
 <!-- ── VUE ADMIN ──────────────────────────────────────────────────────────── -->
 <div id="admin-view">
   <header>
-    <span class="logo">📱 SMS Mirror</span>
+    <span class="logo">📱 YapsonPress V2</span>
     <button class="hbtn" id="btn-dashboard2" onclick="switchView('dashboard')">Dashboard</button>
     <button class="hbtn active" id="btn-admin2" onclick="switchView('admin')">⚙ Admin</button>
     <button class="hbtn" onclick="location.reload()" title="Rafraîchir">🔄 Rafraîchir</button>
@@ -191,7 +198,8 @@ header .hbtn.active{background:rgba(255,255,255,.3);box-shadow:inset 0 0 0 1.5px
   <div class="admin-tabs">
     <button class="admin-tab active" onclick="switchAdminTab('devices')">📱 Appareils</button>
     <button class="admin-tab" onclick="switchAdminTab('users')">👤 Utilisateurs</button>
-  </div>
+  
+    <button class="admin-tab" onclick="switchAdminTab('senders'); loadAdminSenders()">📨 Expéditeurs</button></div>
   <div class="admin-body">
 
     <!-- Onglet Appareils -->
@@ -231,6 +239,13 @@ header .hbtn.active{background:rgba(255,255,255,.3);box-shadow:inset 0 0 0 1.5px
         </table>
       </div>
     </div>
+  <!-- Onglet Expéditeurs -->
+  <div id="tab-senders" class="admin-section">
+    <h2>Gestion des Expéditeurs</h2>
+    <p style="color:#666;margin-bottom:16px;">Toutes les sources de messages détectées. Épinglez celles que vous souhaitez rendre visibles aux utilisateurs.</p>
+    <div id="senders-list" style="display:grid;gap:8px;"></div>
+  </div>
+
 
   </div>
 </div>
@@ -610,7 +625,7 @@ async function adminLoadUsers() {
         <td><span class="role-badge role-${u.role}">${u.role==='admin'?'Admin':'Utilisateur'}</span></td>
         <td>${u.role==='admin' ? '<em style="color:#aaa">Tous les appareils</em>' : (chips||'<em style="color:#aaa">Aucun accès</em>')}<div class="device-chips" style="margin-top:4px"></div></td>
         <td style="display:flex;gap:6px;flex-wrap:wrap">
-          ${u.role!=='admin' ? `<button class="btn-primary btn-sm" onclick="openPermModal(${u.id},'${escHtml(u.username)}',${JSON.stringify(u.device_ids||[])})">🔒 Accès</button>` : ''}
+          ${`<button class="btn-sm ${u.is_active===0?'btn-danger':'btn-success'}" onclick="toggleUserAccess(${u.id})" title="${u.is_active===0?'Compte bloqué – cliquer pour réactiver':'Compte actif – cliquer pour bloquer'}">${u.is_active===0?'✗ Bloqué':'✓ Actif'}</button>`}${u.role!=='admin' ? `<button class="btn-primary btn-sm" onclick="openPermModal(${u.id},'${escHtml(u.username)}',${JSON.stringify(u.device_ids||[])})">📱 Appareils</button> ${u.role!=='admin' ? `<button class="btn-warning btn-sm" onclick="openSenderPermModal(${u.id},'${escHtml(u.username)}')">📬 Expéditeurs</button>` : ''}` : ''}
           <button class="btn-primary btn-sm" onclick="changePassword(${u.id},'${escHtml(u.username)}')">🔑 MDP</button>
           <button class="btn-danger btn-sm" onclick="deleteUser(${u.id},'${escHtml(u.username)}')">✕</button>
         </td>
@@ -696,6 +711,102 @@ if(token) {
   document.getElementById('login-view').style.display = 'flex';
 }
 document.getElementById('login-btn').addEventListener('click', login);
+
+// ── Toggle User Access ────────────────────────────────────────────────────
+async function toggleUserAccess(userId) {
+  try {
+    const res = await fetch('/api/admin/users/' + userId + '/access', { method: 'PATCH', credentials: 'include' });
+    if (!res.ok) throw new Error(await res.text());
+    adminLoadUsers();
+  } catch(e) {
+    alert('Erreur: ' + e.message);
+  }
+}
+
+// ── Admin Senders Management ──────────────────────────────────────────────
+async function loadAdminSenders() {
+  try {
+    const [pinned, msgs] = await Promise.all([
+      api('GET', '/api/admin/senders/pin'),
+      api('GET', '/api/messages?limit=500')
+    ]);
+    const pinnedSet = new Set((pinned||[]).map(p => p.sender));
+    const allSenders = [...new Set((msgs||[]).map(m => m.app_name || m.address || m.phone_number).filter(Boolean))];
+    renderAdminSenders(allSenders, pinnedSet);
+  } catch(e) {
+    const el = document.getElementById('senders-list');
+    if(el) el.innerHTML = '<p style="color:red">Erreur: ' + e.message + '</p>';
+  }
+}
+
+function renderAdminSenders(senders, pinnedSet) {
+  const el = document.getElementById('senders-list');
+  if (!el) return;
+  if (!senders.length) { el.innerHTML = '<p style="color:#888">Aucun expéditeur détecté.</p>'; return; }
+  el.innerHTML = senders.map(s => {
+    const pinned = pinnedSet.has(s);
+    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:${pinned?'#f0f7ff':'#fff'};border:1px solid ${pinned?'#4472F4':'#e0e0e0'};border-radius:8px;">
+      <span style="font-weight:${pinned?'600':'400'}">${escHtml(s)}${pinned?' <span style="color:#4472F4;font-size:11px">● Pinned</span>':''}</span>
+      <button class="btn-sm ${pinned?'btn-danger':'btn-primary'}" onclick="togglePinSender('${escHtml(s)}',${pinned})">${pinned?'❌ Déépingle':'📌 Épingle'}</button>
+    </div>`;
+  }).join('');
+}
+
+async function togglePinSender(sender, isPinned) {
+  try {
+    if (isPinned) {
+      await api('DELETE', '/api/admin/senders/pin', { sender });
+    } else {
+      await api('POST', '/api/admin/senders/pin', { sender });
+    }
+    loadAdminSenders();
+  } catch(e) {
+    alert('Erreur: ' + e.message);
+  }
+}
+
+// ── Sender Permissions Per User ───────────────────────────────────────────
+let _senderPermUserId = null;
+
+async function openSenderPermModal(userId, username) {
+  _senderPermUserId = userId;
+  try {
+    const [pinned, userSenders] = await Promise.all([
+      api('GET', '/api/admin/senders/pin'),
+      api('GET', '/api/admin/users/' + userId + '/senders')
+    ]);
+    const authorized = new Set((userSenders||[]).map(s => s.sender));
+    const pinnedList = (pinned||[]).map(p => p.sender);
+    const rows = pinnedList.map(s => `<label style="display:flex;align-items:center;gap:10px;padding:8px;border-bottom:1px solid #f0f0f0;cursor:pointer">
+      <input type="checkbox" ${authorized.has(s)?'checked':''} onchange="toggleSenderForUser(${userId},'${escHtml(s)}',this.checked)" style="width:18px;height:18px">
+      <span>${escHtml(s)}</span>
+    </label>`).join('');
+    const body = `<div id="sender-perm-modal" style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center">
+      <div style="background:#fff;border-radius:12px;padding:24px;min-width:340px;max-width:480px;max-height:80vh;overflow-y:auto">
+        <h3 style="margin:0 0 4px">Expéditeurs autorisés</h3>
+        <p style="color:#666;margin:0 0 16px;font-size:13px">Utilisateur : <strong>${escHtml(username)}</strong></p>
+        ${rows || '<p style="color:#888">Aucun expéditeur épinglé pour l’instant.</p>'}
+        <button onclick="document.getElementById('sender-perm-modal').remove()" style="margin-top:16px;padding:8px 20px;background:#6c757d;color:#fff;border:none;border-radius:6px;cursor:pointer">Fermer</button>
+      </div>
+    </div>`;
+    document.body.insertAdjacentHTML('beforeend', body);
+  } catch(e) {
+    alert('Erreur: ' + e.message);
+  }
+}
+
+async function toggleSenderForUser(userId, sender, grant) {
+  try {
+    if (grant) {
+      await api('POST', '/api/admin/users/' + userId + '/senders', { sender });
+    } else {
+      await api('DELETE', '/api/admin/users/' + userId + '/senders', { sender });
+    }
+  } catch(e) {
+    alert('Erreur: ' + e.message);
+  }
+}
+
 </script>
 </body>
 </html>
