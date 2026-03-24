@@ -65,6 +65,7 @@ db.exec(`
     username      TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
     role          TEXT DEFAULT 'user',
+    is_active     INTEGER DEFAULT 1,
     created_at    INTEGER DEFAULT (strftime('%s','now'))
   );
 
@@ -86,6 +87,23 @@ devicesWithoutNum.forEach(d => {
   const maxNum = db.prepare("SELECT COALESCE(MAX(number),0) as m FROM devices").get().m;
   db.prepare("UPDATE devices SET number=? WHERE id=?").run(maxNum + 1, d.id);
 });
+
+// ── Migration: add is_active if missing ──────────────────────────────────────
+try { db.exec("ALTER TABLE users ADD COLUMN is_active INTEGER DEFAULT 1"); } catch(e) {}
+
+// ── Nouvelles tables: expéditeurs épinglés ───────────────────────────────────
+db.exec(`
+  CREATE TABLE IF NOT EXISTS pinned_senders (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    sender     TEXT NOT NULL UNIQUE,
+    pinned_at  INTEGER DEFAULT (strftime('%s','now'))
+  );
+  CREATE TABLE IF NOT EXISTS user_sender_permissions (
+    user_id    INTEGER NOT NULL,
+    sender     TEXT NOT NULL,
+    PRIMARY KEY (user_id, sender)
+  );
+`);
 
 // Créer l'utilisateur admin par défaut si inexistant
 const adminExists = db.prepare("SELECT id FROM users WHERE role='admin'").get();
@@ -244,24 +262,35 @@ app.post('/api/messages', requireDeviceAuth, (req, res) => {
 
 // ── Routes : Messages (dashboard) ───────────────────────────────────────────
 app.get('/api/messages', requireDashboardAuth, (req, res) => {
-  const { type, device_id, search, sender, limit=200, offset=0 } = req.query;
-  const allowed = getUserDevices(req.user);
+  const user = req.session.user;
+  const { type, device, search, limit = 50, offset = 0 } = req.query;
 
-  let query  = 'SELECT * FROM messages WHERE 1=1';
-  let params = {};
-  ({ query, params } = addDeviceFilter(query, params, allowed));
+  let whereClauses = [];
+  let params = [];
 
-  if (type)      { query += ' AND type=@type';       params.type = type; }
-  if (device_id) { query += ' AND device_id=@did';   params.did  = device_id; }
-  if (sender)    { query += ' AND (sender=@sndr OR sender_name=@sndr OR app_name=@sndr)'; params.sndr = sender; }
-  if (search)    { query += ' AND (content LIKE @srch OR sender LIKE @srch OR sender_name LIKE @srch OR app_name LIKE @srch)'; params.srch = `%${search}%`; }
+  if (type)   { whereClauses.push("type = ?");      params.push(type); }
+  if (device) { whereClauses.push("device_id = ?"); params.push(device); }
+  if (search) { whereClauses.push("(content LIKE ? OR address LIKE ? OR app_name LIKE ?)"); params.push('%'+search+'%','%'+search+'%','%'+search+'%'); }
 
-  query += ' ORDER BY timestamp DESC LIMIT @lim OFFSET @off';
-  params.lim = parseInt(limit);
-  params.off = parseInt(offset);
+  // Pour les non-admins : filtrer par expéditeurs autorisés
+  if (user.role !== 'admin') {
+    const allowedSenders = db.prepare(`
+      SELECT usp.sender FROM user_sender_permissions usp
+      INNER JOIN pinned_senders ps ON ps.sender = usp.sender
+      WHERE usp.user_id = ?
+    `).all(user.id).map(r => r.sender);
+    if (allowedSenders.length === 0) return res.json([]);
+    const placeholders = allowedSenders.map(() => '?').join(',');
+    whereClauses.push(`COALESCE(app_name, address, phone_number, '') IN (${placeholders})`);
+    params.push(...allowedSenders);
+  }
 
-  const messages = db.prepare(query).all(params);
-  res.json({ messages, total: messages.length });
+  const where = whereClauses.length ? 'WHERE ' + whereClauses.join(' AND ') : '';
+  const rows = db.prepare(`
+    SELECT * FROM messages ${where}
+    ORDER BY timestamp DESC LIMIT ? OFFSET ?
+  `).all(...params, parseInt(limit), parseInt(offset));
+  res.json(rows);
 });
 
 app.get('/api/senders', requireDashboardAuth, (req, res) => {
@@ -325,7 +354,7 @@ app.get('/api/config', requireDeviceAuth, (req, res) => {
 
 // ── Routes : Admin – Utilisateurs ───────────────────────────────────────────
 app.get('/api/admin/users', requireDashboardAuth, requireAdmin, (req, res) => {
-  const users    = db.prepare("SELECT id,username,role,created_at FROM users ORDER BY created_at ASC").all();
+  const users    = db.prepare("SELECT id,username,role,is_active,created_at FROM users ORDER BY created_at ASC").all();
   const permsStmt= db.prepare("SELECT device_id FROM device_permissions WHERE user_id=?");
   res.json(users.map(u => ({ ...u, device_ids: permsStmt.all(u.id).map(p => p.device_id) })));
 });
@@ -367,6 +396,79 @@ app.put('/api/admin/users/:id/permissions', requireDashboardAuth, requireAdmin, 
   db.prepare("DELETE FROM device_permissions WHERE user_id=?").run(uid);
   const ins = db.prepare("INSERT OR IGNORE INTO device_permissions (user_id,device_id) VALUES (?,?)");
   db.transaction(ids => ids.forEach(did => ins.run(uid, did)))(device_ids);
+  res.json({ ok: true });
+});
+
+// ── PATCH /api/admin/users/:id/access — Activer / bloquer un compte ──────────
+app.patch('/api/admin/users/:id/access', requireDashboardAuth, requireAdmin, (req, res) => {
+  const { id } = req.params;
+  const user = db.prepare('SELECT id, username, is_active FROM users WHERE id = ?').get(id);
+  if (!user) return res.status(404).json({ error: 'Utilisateur introuvable' });
+  const newState = user.is_active === 0 ? 1 : 0;
+  db.prepare('UPDATE users SET is_active = ? WHERE id = ?').run(newState, id);
+  res.json({ id: user.id, username: user.username, is_active: newState });
+});
+
+// ── Routes : Admin – Expéditeurs épinglés ────────────────────────────────────
+
+// Lister tous les expéditeurs uniques + statut épinglé
+app.get('/api/admin/senders', requireDashboardAuth, requireAdmin, (req, res) => {
+  const pinned = db.prepare('SELECT sender FROM pinned_senders').all().map(r => r.sender);
+  const pinnedSet = new Set(pinned);
+  const rows = db.prepare(`
+    SELECT COALESCE(app_name, address, phone_number, 'Inconnu') AS sender, COUNT(*) as count
+    FROM messages
+    GROUP BY sender
+    ORDER BY count DESC
+  `).all();
+  const result = rows.map(r => ({ sender: r.sender, count: r.count, pinned: pinnedSet.has(r.sender) }));
+  // Also include pinned senders that may have no recent messages
+  pinned.forEach(s => { if (!pinnedSet.has(s) || !result.find(r => r.sender === s)) {
+    if (!result.find(r => r.sender === s)) result.push({ sender: s, count: 0, pinned: true });
+  }});
+  res.json(result);
+});
+
+// Épingler un expéditeur
+app.post('/api/admin/senders/pin', requireDashboardAuth, requireAdmin, (req, res) => {
+  const { sender } = req.body;
+  if (!sender) return res.status(400).json({ error: 'sender requis' });
+  try {
+    db.prepare('INSERT OR IGNORE INTO pinned_senders (sender) VALUES (?)').run(sender);
+    res.json({ ok: true, sender });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Désépingler un expéditeur
+app.delete('/api/admin/senders/pin/:sender', requireDashboardAuth, requireAdmin, (req, res) => {
+  const sender = decodeURIComponent(req.params.sender);
+  db.prepare('DELETE FROM pinned_senders WHERE sender = ?').run(sender);
+  // Remove all user permissions for this sender
+  db.prepare('DELETE FROM user_sender_permissions WHERE sender = ?').run(sender);
+  res.json({ ok: true });
+});
+
+// Lister les expéditeurs autorisés pour un utilisateur
+app.get('/api/admin/users/:id/senders', requireDashboardAuth, requireAdmin, (req, res) => {
+  const { id } = req.params;
+  const senders = db.prepare('SELECT sender FROM user_sender_permissions WHERE user_id = ?').all(id).map(r => r.sender);
+  res.json(senders);
+});
+
+// Autoriser un expéditeur pour un utilisateur
+app.post('/api/admin/users/:id/senders', requireDashboardAuth, requireAdmin, (req, res) => {
+  const { id } = req.params;
+  const { sender } = req.body;
+  if (!sender) return res.status(400).json({ error: 'sender requis' });
+  db.prepare('INSERT OR IGNORE INTO user_sender_permissions (user_id, sender) VALUES (?, ?)').run(id, sender);
+  res.json({ ok: true });
+});
+
+// Retirer l'autorisation d'un expéditeur pour un utilisateur
+app.delete('/api/admin/users/:id/senders/:sender', requireDashboardAuth, requireAdmin, (req, res) => {
+  const { id } = req.params;
+  const sender = decodeURIComponent(req.params.sender);
+  db.prepare('DELETE FROM user_sender_permissions WHERE user_id = ? AND sender = ?').run(id, sender);
   res.json({ ok: true });
 });
 
