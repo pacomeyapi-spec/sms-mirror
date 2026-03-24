@@ -1,44 +1,3 @@
-  // ── Notifications ────────────────────────────────────────────────────────────────────────────────────────────────────
-  function requestNotifPermission() {
-    if ('Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission();
-    }
-  }
-
-  function playNotifSound() {
-    try {
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(880, ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.15);
-      gain.gain.setValueAtTime(0.25, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45);
-      osc.start(ctx.currentTime);
-      osc.stop(ctx.currentTime + 0.45);
-    } catch(e) {}
-  }
-
-  function showDesktopNotif(title, body) {
-    if (!('Notification' in window) || Notification.permission !== 'granted') return;
-    const n = new Notification(title, {
-      body,
-      icon: '/favicon.ico',
-      tag: 'yapson-new-msg',
-      renotify: true,
-    });
-    n.onclick = () => { window.focus(); n.close(); };
-    setTimeout(() => n.close(), 6000);
-  }
-
-  function updateTabTitle() {
-    const total = allSenders.reduce((sum, s) => sum + (s.unread || 0), 0);
-    document.title = total > 0 ? '(' + total + ') YapsonPress V2' : 'YapsonPress V2';
-  }
-
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -622,17 +581,27 @@ function initSocket() {
   socket = io({ auth: { token } });
 
   socket.on('new_messages', (msgs) => {
-    // Notifier l'utilisateur dès l'arrivée de nouveaux messages
+    // Notifier uniquement pour les expéditeurs autorisés
     if (msgs && msgs.length > 0) {
-      const first = msgs[0];
-      const sender = first.sender_name || first.sender || first.app_name || 'Inconnu';
-      const preview = first.content
-        ? first.content.slice(0, 80)
-        : (first.type === 'call' ? '📞 Appel entrant' : 'Nouvelle notification');
-      const title = msgs.length === 1 ? sender : msgs.length + ' nouveaux messages';
-      const body  = msgs.length === 1 ? preview : 'Dont un de ' + sender;
-      playNotifSound();
-      showDesktopNotif(title, body);
+      // Filtrer selon les expéditeurs visibles par cet utilisateur (déjà filtrés côté API)
+      const authorizedNames = new Set(allSenders.map(s => s.display_name));
+      const visibleMsgs = userRole === 'admin'
+        ? msgs
+        : msgs.filter(m => {
+            const dn = m.sender_name || m.sender || m.app_name || 'Inconnu';
+            return authorizedNames.has(dn);
+          });
+      if (visibleMsgs.length > 0) {
+        const first = visibleMsgs[0];
+        const sender = first.sender_name || first.sender || first.app_name || 'Inconnu';
+        const preview = first.content
+          ? first.content.slice(0, 80)
+          : (first.type === 'call' ? '📞 Appel entrant' : 'Nouvelle notification');
+        const title = visibleMsgs.length === 1 ? sender : visibleMsgs.length + ' nouveaux messages';
+        const body  = visibleMsgs.length === 1 ? preview : 'Dont un de ' + sender;
+        playNotifSound();
+        showDesktopNotif(title, body);
+      }
     }
     // Mettre à jour les senders + titre onglet
     loadSenders().then(updateTabTitle).catch(() => {});
