@@ -354,14 +354,16 @@ function switchView(view) {
   }
 }
 function switchAdminTab(tab) {
-  document.querySelectorAll('.admin-tab').forEach((t,i)=>{
-    t.classList.toggle('active', (i===0&&tab==='devices')||(i===1&&tab==='users'));
+  document.querySelectorAll('.admin-tab').forEach(t => {
+    const oc = t.getAttribute('onclick') || '';
+    t.classList.toggle('active', oc.indexOf("'" + tab + "'") !== -1);
   });
-  document.getElementById('tab-devices').classList.toggle('active', tab==='devices');
-  document.getElementById('tab-users').classList.toggle('active',   tab==='users');
+  document.querySelectorAll('.admin-section').forEach(s => {
+    s.classList.toggle('active', s.id === 'tab-' + tab);
+  });
+  if (tab === 'senders') loadAdminSenders();
+  if (tab === 'users') typeof adminLoadUsers === 'function' && adminLoadUsers();
 }
-
-// ── Dashboard ─────────────────────────────────────────────────────────────────
 function showDashboard() {
   document.getElementById('login-view').style.display = 'none';
   document.getElementById('app-view').style.display   = 'flex';
@@ -726,33 +728,16 @@ async function toggleUserAccess(userId) {
 // ── Admin Senders Management ──────────────────────────────────────────────
 async function loadAdminSenders() {
   try {
-    const [pinned, msgs] = await Promise.all([
-      api('GET', '/api/admin/senders'),
-      api('GET', '/api/messages?limit=500')
-    ]);
-    const pinnedSet = new Set(pinned||[]);
-    const msgSenders = [...new Set((msgs||[]).map(m => m.app_name || m.address || m.phone_number).filter(Boolean))];
-    const allSenders = [...new Set([...pinnedSet, ...msgSenders])];
-    renderAdminSenders(allSenders, pinnedSet);
+    const data = await api('GET', '/api/admin/senders');
+    // data = [{sender, pinned}, ...]
+    const all = (data || []).map(d => d.sender);
+    const pinnedSet = new Set((data || []).filter(d => d.pinned).map(d => d.sender));
+    renderAdminSenders(all, pinnedSet);
   } catch(e) {
     const el = document.getElementById('senders-list');
-    if(el) el.innerHTML = '<p style="color:red">Erreur: ' + e.message + '</p>';
+    if (el) el.innerHTML = '<p style="color:red">Erreur: ' + e.message + '</p>';
   }
 }
-
-function renderAdminSenders(senders, pinnedSet) {
-  const el = document.getElementById('senders-list');
-  if (!el) return;
-  if (!senders.length) { el.innerHTML = '<p style="color:#888">Aucun expéditeur détecté.</p>'; return; }
-  el.innerHTML = senders.map(s => {
-    const pinned = pinnedSet.has(s);
-    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:${pinned?'#f0f7ff':'#fff'};border:1px solid ${pinned?'#4472F4':'#e0e0e0'};border-radius:8px;">
-      <span style="font-weight:${pinned?'600':'400'}">${escHtml(s)}${pinned?' <span style="color:#4472F4;font-size:11px">● Pinned</span>':''}</span>
-      <button class="btn-sm ${pinned?'btn-danger':'btn-primary'}" onclick="togglePinSender('${escHtml(s)}',${pinned})">${pinned?'❌ Déépingle':'📌 Épingle'}</button>
-    </div>`;
-  }).join('');
-}
-
 async function togglePinSender(sender, isPinned) {
   try {
     if (isPinned) {
@@ -771,31 +756,34 @@ let _senderPermUserId = null;
 
 async function openSenderPermModal(userId, username) {
   _senderPermUserId = userId;
+  document.getElementById('perm-modal-title').textContent = 'Expéditeurs de ' + username;
+  const list = document.getElementById('perm-sender-list');
+  list.innerHTML = '<p>Chargement...</p>';
+  document.getElementById('sender-perm-modal').style.display = 'flex';
   try {
-    const [pinned, userSenders] = await Promise.all([
+    const [sendersData, userSenders] = await Promise.all([
       api('GET', '/api/admin/senders'),
       api('GET', '/api/admin/users/' + userId + '/senders')
     ]);
-    const authorized = new Set(userSenders||[]);
-    const pinnedList = pinned||[];
-    const rows = pinnedList.map(s => `<label style="display:flex;align-items:center;gap:10px;padding:8px;border-bottom:1px solid #f0f0f0;cursor:pointer">
-      <input type="checkbox" ${authorized.has(s)?'checked':''} onchange="toggleSenderForUser(${userId},'${escHtml(s)}',this.checked)" style="width:18px;height:18px">
-      <span>${escHtml(s)}</span>
-    </label>`).join('');
-    const body = `<div id="sender-perm-modal" style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center">
-      <div style="background:#fff;border-radius:12px;padding:24px;min-width:340px;max-width:480px;max-height:80vh;overflow-y:auto">
-        <h3 style="margin:0 0 4px">Expéditeurs autorisés</h3>
-        <p style="color:#666;margin:0 0 16px;font-size:13px">Utilisateur : <strong>${escHtml(username)}</strong></p>
-        ${rows || '<p style="color:#888">Aucun expéditeur épinglé pour l’instant.</p>'}
-        <button onclick="document.getElementById('sender-perm-modal').remove()" style="margin-top:16px;padding:8px 20px;background:#6c757d;color:#fff;border:none;border-radius:6px;cursor:pointer">Fermer</button>
-      </div>
-    </div>`;
-    document.body.insertAdjacentHTML('beforeend', body);
+    // sendersData = [{sender, pinned}], only show pinned ones
+    const pinned = (sendersData || []).filter(d => d.pinned).map(d => d.sender);
+    // userSenders = string[]
+    const authorized = new Set(userSenders || []);
+    if (pinned.length === 0) {
+      list.innerHTML = '<p>Aucun expéditeur épinglé.</p>';
+      return;
+    }
+    list.innerHTML = pinned.map(s => `
+      <label style="display:flex;align-items:center;gap:8px;padding:6px 0;cursor:pointer;">
+        <input type="checkbox" ${authorized.has(s) ? 'checked' : ''}
+          onchange="toggleSenderForUser(${userId}, '${s.replace(/'/g,'\\'')}', this.checked)">
+        <span>${s}</span>
+      </label>
+    `).join('');
   } catch(e) {
-    alert('Erreur: ' + e.message);
+    list.innerHTML = '<p style="color:red">Erreur: ' + e.message + '</p>';
   }
 }
-
 async function toggleSenderForUser(userId, sender, grant) {
   try {
     if (grant) {
