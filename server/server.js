@@ -28,7 +28,7 @@ console.log(`  Device Token : ${DEVICE_TOKEN}`);
 console.log('─────────────────────────────────────────────\n');
 
 // ── Base de données SQLite ───────────────────────────────────────────────────
-const db = new Database('sms_mirror.db');
+const db = new Database(process.env.DB_PATH || 'sms_mirror.db');
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS messages (
