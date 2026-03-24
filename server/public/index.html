@@ -453,7 +453,7 @@ async function selectSender(name) {
 async function fetchMessages(sender) {
   try {
     const d = await api('GET',`/api/messages?sender=${encodeURIComponent(sender)}&limit=500`);
-    allMessages = d.messages || [];
+    allMessages = Array.isArray(d) ? d : (d.messages || []);
     renderMessages();
   } catch(e) { console.error(e); }
 }
