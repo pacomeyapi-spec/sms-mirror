@@ -413,20 +413,21 @@ app.patch('/api/admin/users/:id/access', requireDashboardAuth, requireAdmin, (re
 
 // Lister tous les expéditeurs uniques + statut épinglé
 app.get('/api/admin/senders', requireDashboardAuth, requireAdmin, (req, res) => {
-  const pinned = db.prepare('SELECT sender FROM pinned_senders').all().map(r => r.sender);
-  const pinnedSet = new Set(pinned);
-  const rows = db.prepare(`
-    SELECT COALESCE(app_name, address, phone_number, 'Inconnu') AS sender, COUNT(*) as count
-    FROM messages
-    GROUP BY sender
-    ORDER BY count DESC
-  `).all();
-  const result = rows.map(r => ({ sender: r.sender, count: r.count, pinned: pinnedSet.has(r.sender) }));
-  // Also include pinned senders that may have no recent messages
-  pinned.forEach(s => { if (!pinnedSet.has(s) || !result.find(r => r.sender === s)) {
-    if (!result.find(r => r.sender === s)) result.push({ sender: s, count: 0, pinned: true });
-  }});
-  res.json(result);
+  try {
+    const pinned = new Set(
+      db.prepare('SELECT sender FROM pinned_senders').all().map(r => r.sender)
+    );
+    let msgSenders = [];
+    try {
+      msgSenders = db.prepare(
+        'SELECT DISTINCT s FROM (SELECT COALESCE(app_name, address, phone_number, \'\') AS s FROM messages) WHERE s != \'\''
+      ).all().map(r => r.s);
+    } catch(e) {}
+    const all = [...new Set([...pinned, ...msgSenders])];
+    res.json(all.map(s => ({ sender: s, pinned: pinned.has(s) })));
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // Épingler un expéditeur
