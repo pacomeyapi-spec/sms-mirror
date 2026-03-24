@@ -822,5 +822,17 @@ async function toggleSenderForUser(userId, sender, grant) {
 }
 
 </script>
+
+<!-- Modal: Sender Permissions -->
+<div id="sender-perm-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center;">
+  <div style="background:#1e1e2e;border-radius:12px;padding:24px;width:380px;max-width:90vw;max-height:80vh;overflow-y:auto;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <h3 id="perm-modal-title" style="margin:0;font-size:1.1rem;"></h3>
+      <button onclick="document.getElementById('sender-perm-modal').style.display='none'" style="background:none;border:none;color:#aaa;font-size:1.4rem;cursor:pointer;">&times;</button>
+    </div>
+    <p style="font-size:0.85rem;color:#aaa;margin-bottom:12px;">Cochez les expéditeurs auxquels cet utilisateur a accès :</p>
+    <div id="perm-sender-list"></div>
+  </div>
+</div>
 </body>
 </html>
