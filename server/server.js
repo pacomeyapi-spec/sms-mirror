@@ -110,6 +110,10 @@ const adminExists = db.prepare("SELECT id FROM users WHERE role='admin'").get();
 if (!adminExists) {
   const hash = bcrypt.hashSync(DASHBOARD_PASSWORD, 10);
   db.prepare("INSERT OR IGNORE INTO users (username,password_hash,role) VALUES ('admin',?,'admin')").run(hash);
+// Seed default pinned senders
+['Wave Business', '+454', 'MobileMoney', 'MoovMoney'].forEach(function(s) {
+  db.prepare('INSERT OR IGNORE INTO pinned_senders (sender) VALUES (?)').run(s);
+});
   console.log('[Auth] Compte admin créé avec le mot de passe DASHBOARD_PASSWORD');
 }
 
