@@ -283,10 +283,19 @@ app.get('/api/messages', requireDashboardAuth, (req, res) => {
       params.push(sender);
     }
     if (user.role !== 'admin') {
-      const allowedSenders = db.prepare('SELECT usp.sender FROM user_sender_permissions usp INNER JOIN pinned_senders ps ON ps.sender = usp.sender WHERE usp.user_id = ?').all(user.id).map(r => r.sender);
+      // Filtre par appareil autorisé
+      const allowedDevices = db.prepare("SELECT device_id FROM device_permissions WHERE user_id=?")
+        .all(user.id).map(p => p.device_id);
+      if (allowedDevices.length === 0) return res.json([]);
+      const dph = allowedDevices.map(() => '?').join(',');
+      whereClauses.push(`device_id IN (${dph})`);
+      params.push(...allowedDevices);
+      // Filtre par expéditeur autorisé (intersection avec filtre appareil)
+      const allowedSenders = db.prepare('SELECT sender FROM user_sender_permissions WHERE user_id = ?')
+        .all(user.id).map(r => r.sender);
       if (allowedSenders.length === 0) return res.json([]);
-      const placeholders = allowedSenders.map(() => '?').join(',');
-      whereClauses.push("COALESCE(sender_name, sender, app_name, '') IN (" + placeholders + ")");
+      const sph = allowedSenders.map(() => '?').join(',');
+      whereClauses.push(`COALESCE(sender_name, sender, app_name, '') IN (${sph})`);
       params.push(...allowedSenders);
     }
     const where = whereClauses.length > 0 ? 'WHERE ' + whereClauses.join(' AND ') : '';
