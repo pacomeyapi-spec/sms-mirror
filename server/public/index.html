@@ -181,6 +181,7 @@ header .hbtn.active{background:rgba(255,255,255,.3);box-shadow:inset 0 0 0 1.5px
         <div id="messages-list">
           <div id="msg-empty">Aucun message</div>
         </div>
+        <div id="load-more-bar" style="display:none;padding:12px 20px;text-align:center;flex-shrink:0;background:#fff;border-top:1px solid #e0e0e0"><button id="load-more-btn" onclick="loadMoreMessages()" style="background:#1565C0;color:#fff;border:none;border-radius:6px;padding:8px 24px;cursor:pointer;font-size:.88rem;font-weight:600">Charger plus de messages</button></div>
       </div>
     </div>
   </div>
@@ -273,6 +274,7 @@ let userRole     = localStorage.getItem('sm_role')     || '';
 let userName     = localStorage.getItem('sm_username') || '';
 let currentSender = null;
 let allMessages   = [];
+let _msgOffset = 0, _currentMsgSender = null, _msgHasMore = false;
 let allSenders    = [];
 let permUserId    = null;
 let adminDevices  = [];
@@ -453,11 +455,33 @@ async function selectSender(name) {
 }
 
 async function fetchMessages(sender) {
+  _currentMsgSender = sender; _msgOffset = 0;
   try {
-    const d = await api('GET',`/api/messages?sender=${encodeURIComponent(sender)}&limit=500`);
-    allMessages = Array.isArray(d) ? d : (d.messages || []);
+    const d = await api('GET',`/api/messages?sender=${encodeURIComponent(sender)}&limit=500&offset=0`);
+    const msgs = Array.isArray(d) ? d : (d.messages || []);
+    allMessages = msgs;
+    _msgHasMore = msgs.length === 500;
+    _msgOffset = msgs.length;
     renderMessages();
+    const bar = document.getElementById('load-more-bar');
+    if (bar) bar.style.display = _msgHasMore ? '' : 'none';
   } catch(e) { console.error(e); }
+}
+async function loadMoreMessages() {
+  if (!_currentMsgSender) return;
+  const btn = document.getElementById('load-more-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Chargement…'; }
+  try {
+    const d = await api('GET',`/api/messages?sender=${encodeURIComponent(_currentMsgSender)}&limit=500&offset=${_msgOffset}`);
+    const msgs = Array.isArray(d) ? d : (d.messages || []);
+    allMessages = allMessages.concat(msgs);
+    _msgHasMore = msgs.length === 500;
+    _msgOffset += msgs.length;
+    renderMessages();
+    const bar = document.getElementById('load-more-bar');
+    if (bar) bar.style.display = _msgHasMore ? '' : 'none';
+  } catch(e) { console.error(e); }
+  if (btn) { btn.disabled = false; btn.textContent = 'Charger plus de messages'; }
 }
 
 // ── Recherche dans messages ───────────────────────────────────────────────────
