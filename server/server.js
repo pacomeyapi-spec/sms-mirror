@@ -264,7 +264,22 @@ app.post('/api/messages', requireDeviceAuth, (req, res) => {
     }
   })(messages);
 
-  if (inserted.length > 0) io.emit('new_messages', inserted);
+  if (inserted.length > 0) {
+    // Admins reçoivent tous les messages
+    io.to('admins').emit('new_messages', inserted);
+    // Non-admins : émettre uniquement les messages des appareils autorisés
+    const seenUsers = new Set();
+    for (const [, u] of socketUsers) {
+      if (u.role === 'admin' || seenUsers.has(u.id)) continue;
+      seenUsers.add(u.id);
+      const allowedDevs = new Set(
+        db.prepare('SELECT device_id FROM device_permissions WHERE user_id=?')
+          .all(u.id).map(p => p.device_id)
+      );
+      const userMsgs = inserted.filter(m => allowedDevs.has(m.device_id));
+      if (userMsgs.length > 0) io.to('user_' + u.id).emit('new_messages', userMsgs);
+    }
+  }
   res.json({ ok: true, inserted: inserted.length });
 });
 
@@ -511,9 +526,23 @@ app.put('/api/admin/devices/:id', requireDashboardAuth, requireAdmin, (req, res)
 });
 
 // ── WebSocket ────────────────────────────────────────────────────────────────
+const socketUsers = new Map(); // socket.id → user
+
 io.on('connection', (socket) => {
+  const authToken = socket.handshake.auth && socket.handshake.auth.token;
+  if (authToken) {
+    try {
+      const user = jwt.verify(authToken, SECRET_KEY);
+      socketUsers.set(socket.id, user);
+      socket.join('user_' + user.id);
+      if (user.role === 'admin') socket.join('admins');
+    } catch(e) { /* token invalide */ }
+  }
   console.log(`[WebSocket] Dashboard connecté (${socket.id})`);
-  socket.on('disconnect', () => console.log(`[WebSocket] Dashboard déconnecté (${socket.id})`));
+  socket.on('disconnect', () => {
+    socketUsers.delete(socket.id);
+    console.log(`[WebSocket] Dashboard déconnecté (${socket.id})`);
+  });
 });
 
 // ── Démarrage ────────────────────────────────────────────────────────────────
