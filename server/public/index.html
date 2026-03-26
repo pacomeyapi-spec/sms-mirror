@@ -71,6 +71,8 @@ header .hbtn.active{background:rgba(255,255,255,.3);box-shadow:inset 0 0 0 1.5px
 .msg-date{font-size:.72rem;color:#aaa;margin-left:auto}
 .msg-content{font-size:.88rem;color:#444;line-height:1.5;margin-bottom:10px;word-break:break-word}
 .msg-content.empty{font-style:italic;color:#bbb}
+.money-phone{background:#fff8e1;color:#e65100;font-weight:700;font-size:1rem;padding:6px 12px;border-radius:6px;margin-bottom:8px;letter-spacing:.03em;display:inline-block}
+.phone-num{color:#1565C0;font-weight:600;background:#e3f2fd;padding:1px 5px;border-radius:4px;white-space:nowrap}
 .card-actions{display:flex;gap:8px}
 .btn-status{padding:5px 12px;border:none;border-radius:6px;font-size:.78rem;font-weight:600;cursor:pointer;transition:all .2s;opacity:.85}
 .btn-status:hover{opacity:1}
@@ -529,12 +531,26 @@ function buildCard(m) {
   const contentCls = content ? '' : ' empty';
   const contentTxt = content || (m.type==='call' ? '(Appel '+m.call_type+')' : '(Pas de contenu)');
 
+  // Formatage numéros 225 pour MobileMoney / MoovMoney
+  const senderName = m.sender_name || m.sender || m.app_name || '';
+  const isMoney = /Mobile\s*Money|Moov\s*Money/i.test(senderName);
+  let phoneHighlight = '';
+  let bodyHtml = escHtml(contentTxt);
+  if (isMoney) {
+    const phoneMatch = content.match(/225(0\d{9})\b/);
+    if (phoneMatch) {
+      phoneHighlight = '<div class="money-phone">📞 ' + phoneMatch[1] + '</div>';
+    }
+    bodyHtml = bodyHtml.replace(/225(0\d{9})/g, '<span class="phone-num">+225 $1</span>');
+  }
+
   div.innerHTML = `
     <div class="card-top">
       <span class="type-badge ${typeClass}">${typeLabel}</span>
       <span class="msg-date">${fmtDate(m.timestamp)}</span>
     </div>
-    <div class="msg-content${contentCls}">${escHtml(contentTxt)}</div>
+    ${phoneHighlight}
+    <div class="msg-content${contentCls}">${bodyHtml}</div>
     <div class="card-actions">
       <button class="btn-status btn-approuve ${m.status==='approuve'?'active':''}"
         onclick="setStatus('${m.id}','approuve',this)">✔ Approuvé</button>
