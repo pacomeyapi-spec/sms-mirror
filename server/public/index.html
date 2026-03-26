@@ -621,9 +621,14 @@ function initSocket() {
         return dn === currentSender;
       });
       if(relevant.length) {
-        allMessages = [...relevant, ...allMessages];
-        const q = document.getElementById('search-input').value.toLowerCase().trim();
-        renderMessages(q);
+        if (userRole === 'admin') {
+          allMessages = [...relevant, ...allMessages];
+          const q = document.getElementById('search-input').value.toLowerCase().trim();
+          renderMessages(q);
+        } else {
+          // Re-fetch via API pour respecter le filtre d'appareils autorisés
+          fetchMessages(currentSender);
+        }
       }
     }
   });
