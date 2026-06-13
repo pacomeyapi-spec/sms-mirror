@@ -1,7 +1,7 @@
 {
   "name": "sms-mirror-server",
-  "version": "1.0.0",
-  "description": "Serveur de synchronisation SMS/notifications/appels vers navigateur",
+  "version": "2.0.0",
+  "description": "Serveur de synchronisation SMS/notifications/appels (liste blanche + persistance Firestore)",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -15,9 +15,10 @@
     "bcryptjs": "^2.4.3",
     "jsonwebtoken": "^9.0.2",
     "cors": "^2.8.5",
-    "uuid": "^9.0.1"
+    "uuid": "^9.0.1",
+    "firebase-admin": "^12.7.0"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": "20.x"
   }
 }
