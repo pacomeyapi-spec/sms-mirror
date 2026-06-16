@@ -73,6 +73,29 @@ function classify(msg) {
   return { keep: false, override: null };
 }
 
+// Montant FCFA en entier : "1.000" → 1000, "4 950" → 4950, "990" → 990
+function parseFcfa(s) {
+  const d = String(s || '').replace(/[.\s\u00a0,]/g, '');
+  return parseInt(d, 10) || 0;
+}
+
+/**
+ * Wave perso prélève 1% au départ (1000 envoyés → 990 reçus).
+ * On réécrit le montant affiché « Vous avez reçu Xf » avec le montant d'origine
+ * (reçu ÷ 0,99, arrondi), pour que YapsonPress ET les bots voient le vrai montant.
+ * N'affecte QUE les notifs Wave perso « Transfert reçu » (jamais les vrais Wave Business).
+ */
+function correctWavePersoAmount(content) {
+  if (!content) return content;
+  const m = content.match(/(avez\s+re[çc]u\s+)([\d\s\u00a0.,]+?)(\s*F)\b/i);
+  if (!m) return content;
+  const recu = parseFcfa(m[2]);
+  if (!recu) return content;
+  const origine = Math.round(recu / 0.99);
+  if (origine === recu) return content;
+  return content.slice(0, m.index) + m[1] + origine + m[3] + content.slice(m.index + m[0].length);
+}
+
 // ── Base de données SQLite (cache de travail) ────────────────────────────────
 const _dbPath = process.env.DB_PATH || 'sms_mirror.db';
 const _dbDir = require('path').dirname(_dbPath);
@@ -317,6 +340,9 @@ app.post('/api/messages', requireDeviceAuth, async (req, res) => {
     for (const msg of msgs) {
       const verdict = classify(msg);
       if (!verdict.keep) { dropped++; continue; }   // ← expéditeur non autorisé : ignoré
+      // Wave perso « Transfert reçu » (override = Wave Business) → corriger le montant (reçu ÷ 0,99)
+      let _content = msg.content || null;
+      if (verdict.override === 'Wave Business') _content = correctWavePersoAmount(_content);
       const row = {
         id:            msg.id            || uuidv4(),
         device_id:     msg.device_id     || 'unknown',
@@ -324,7 +350,7 @@ app.post('/api/messages', requireDeviceAuth, async (req, res) => {
         type:          msg.type          || 'notification',
         sender:        msg.sender        || null,
         sender_name:   verdict.override  || msg.sender_name || null,
-        content:       msg.content       || null,
+        content:       _content,
         app_name:      msg.app_name      || null,
         app_package:   msg.app_package   || null,
         call_type:     msg.call_type     || null,
