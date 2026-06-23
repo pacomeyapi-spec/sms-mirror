@@ -69,8 +69,8 @@ class NotificationListener : NotificationListenerService() {
             val api = ApiClient(settings)
             api.sendMessages(listOf(payload))
                 .onSuccess {
-                    // Supprimer la notification Wave Business après envoi réussi
-                    if (appName == "Wave Business") {
+                    // Supprimer les notifications Wave (perso ET business) après envoi réussi
+                    if (appName.contains("wave", ignoreCase = true)) {
                         try {
                             cancelNotification(notifKey)
                         } catch (e: Exception) {

@@ -39,6 +39,7 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val PERM_REQUEST_CODE = 100
+        private const val CALL_SCREENING_ROLE_CODE = 200
         private val REQUIRED_PERMISSIONS = arrayOf(
             Manifest.permission.READ_SMS,
             Manifest.permission.RECEIVE_SMS,
@@ -140,6 +141,32 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+
+        // Rôle de filtrage des appels (rejet automatique des appels entrants)
+        requestCallScreeningRole()
+    }
+
+    private fun requestCallScreeningRole() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            log("ℹ️ Rejet d'appels indisponible (Android < 10)")
+            return
+        }
+        try {
+            val rm = getSystemService(android.app.role.RoleManager::class.java) ?: return
+            val role = android.app.role.RoleManager.ROLE_CALL_SCREENING
+            if (!rm.isRoleAvailable(role)) {
+                log("ℹ️ Filtrage des appels non disponible sur cet appareil")
+                return
+            }
+            if (rm.isRoleHeld(role)) {
+                log("✅ Rejet automatique des appels actif")
+                return
+            }
+            log("ℹ️ Autorisez 'SMS Mirror' comme filtre d'appels pour rejeter les appels entrants")
+            startActivityForResult(rm.createRequestRoleIntent(role), CALL_SCREENING_ROLE_CODE)
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Rôle filtrage appels: ${e.message}")
+        }
     }
 
     private fun startSync() {
@@ -221,6 +248,14 @@ class MainActivity : AppCompatActivity() {
             updatePermissionStatus()
             val granted = grantResults.count { it == PackageManager.PERMISSION_GRANTED }
             log("🔑 $granted/${permissions.size} permissions accordées")
+        }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == CALL_SCREENING_ROLE_CODE) {
+            if (resultCode == RESULT_OK) log("✅ Rejet automatique des appels activé")
+            else log("⚠️ Rejet des appels non activé (rôle refusé)")
         }
     }
 
