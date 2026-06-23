@@ -7,6 +7,9 @@ on:
     branches: [ main, master ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -41,6 +44,18 @@ jobs:
           name: SmsMirror-debug
           path: android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 90
+
+      - name: Préparer l'APK pour la Release
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk SmsMirror.apk
+
+      - name: Publier la Release (lien direct APK)
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: SMS Mirror — dernier APK
+          body: "APK de debug signé avec la clé fixe Yapson. Téléchargement direct via le fichier SmsMirror.apk ci-dessous."
+          files: SmsMirror.apk
 
       - name: Compilation APK Release (non signé)
         working-directory: android
