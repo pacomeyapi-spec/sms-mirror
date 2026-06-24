@@ -390,6 +390,9 @@ app.get('/api/messages', requireDashboardAuth, (req, res) => {
     const user = req.user;
     const { type, device, search, sender, limit=100, offset=0 } = req.query;
     let whereClauses = [], params = [];
+    // Masquer (affichage seulement, données conservées) les transferts SORTANTS de +454
+    // ex: "Le transfert de 1010.00 FCFA vers le 0712117807 est un succes…" — ce ne sont pas des dépôts entrants.
+    whereClauses.push("NOT (COALESCE(sender_name, sender, app_name, '') IN ('+454','454') AND LOWER(COALESCE(content,'')) LIKE '%vers le%')");
     if (type)   { whereClauses.push("type = ?"); params.push(type); }
     if (device) { whereClauses.push("device_id = ?"); params.push(device); }
     if (search) { whereClauses.push("(content LIKE ? OR sender LIKE ? OR app_name LIKE ? OR sender_name LIKE ?)"); params.push('%'+search+'%','%'+search+'%','%'+search+'%','%'+search+'%'); }
