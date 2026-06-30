@@ -76,17 +76,21 @@ function classify(msg) {
 
 /**
  * Clé de déduplication déterministe d'un message.
- * Deux captures/renvois du MÊME SMS (même appareil, même contenu, même horodatage)
- * produisent le même id → INSERT OR IGNORE (SQLite) + même doc Firestore = idempotent.
- * Le contenu (qui inclut la référence unique de transaction) garantit que deux
- * vraies transactions distinctes ne sont jamais fusionnées.
+ * Pour les SMS transactionnels (Wave/OMCI/Moov/MobileMoney), le CONTENU est
+ * naturellement unique : il porte une « Reference » et un « Solde » propres à
+ * chaque transaction. On déduplique donc sur le contenu normalisé seul — ainsi
+ * deux captures/renvois du même SMS fusionnent même si leur horodatage ou leur
+ * device_id diffère (cause des doublons observés). Les messages SANS contenu
+ * (appels, notifs vides) gardent une clé stricte par événement pour ne jamais
+ * être fusionnés à tort.
  */
 function contentKey(m) {
+  const c = (m.content || '').replace(/\s+/g, ' ').trim();
+  if (c) return 'm_' + crypto.createHash('sha1').update(c).digest('hex');
   const parts = [
     m.device_id || 'unknown',
     m.type || 'notification',
-    m.sender || '',
-    m.content || '',
+    m.sender || m.sender_name || '',
     m.timestamp || '',
     m.call_type || '',
     m.call_duration || '',
