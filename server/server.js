@@ -14,6 +14,7 @@ const bcrypt     = require('bcryptjs');
 const jwt        = require('jsonwebtoken');
 const path       = require('path');
 const Database   = require('better-sqlite3');
+const crypto     = require('crypto');
 const { v4: uuidv4 } = require('uuid');
 
 // ── Configuration ────────────────────────────────────────────────────────────
@@ -71,6 +72,26 @@ function classify(msg) {
   if (k === 'wave' && ck.includes('transfertrecu')) return { keep: true, override: 'Wave Business' };
   if (ALLOWED_SENDERS.has(k)) return { keep: true, override: null };
   return { keep: false, override: null };
+}
+
+/**
+ * Clé de déduplication déterministe d'un message.
+ * Deux captures/renvois du MÊME SMS (même appareil, même contenu, même horodatage)
+ * produisent le même id → INSERT OR IGNORE (SQLite) + même doc Firestore = idempotent.
+ * Le contenu (qui inclut la référence unique de transaction) garantit que deux
+ * vraies transactions distinctes ne sont jamais fusionnées.
+ */
+function contentKey(m) {
+  const parts = [
+    m.device_id || 'unknown',
+    m.type || 'notification',
+    m.sender || '',
+    m.content || '',
+    m.timestamp || '',
+    m.call_type || '',
+    m.call_duration || '',
+  ];
+  return 'm_' + crypto.createHash('sha1').update(parts.join('\u0001')).digest('hex');
 }
 
 // Montant FCFA en entier : "1.000" → 1000, "4 950" → 4950, "990" → 990
@@ -344,7 +365,7 @@ app.post('/api/messages', requireDeviceAuth, async (req, res) => {
       let _content = msg.content || null;
       if (verdict.override === 'Wave Business') _content = correctWavePersoAmount(_content);
       const row = {
-        id:            msg.id            || uuidv4(),
+        id:            contentKey(msg),
         device_id:     msg.device_id     || 'unknown',
         device_name:   msg.device_name   || null,
         type:          msg.type          || 'notification',
@@ -495,6 +516,85 @@ app.post('/api/admin/import', requireDashboardAuth, requireAdmin, async (req, re
   })();
   await fsBatchSet('messages', rows, r => r.id);
   res.json({ ok: true, imported: rows.length, received: batch.length });
+});
+
+// ── Déduplication des messages existants (Firestore = source de vérité) ───────
+// One-shot : regroupe les doublons (même appareil/contenu/horodatage), garde une
+// seule copie en préservant le statut déjà attribué, et la replace sur l'id
+// canonique (contentKey) pour que tout futur renvoi du même SMS soit idempotent.
+//   body optionnel : { dryRun?: boolean, limit?: number }
+app.post('/api/admin/dedup', requireDashboardAuth, requireAdmin, async (req, res) => {
+  if (!fsdb) return res.status(503).json({ error: 'Firestore non configuré' });
+  const dryRun = req.body && req.body.dryRun === true;
+  const cap    = Math.min(parseInt((req.body && req.body.limit) || 200000, 10), 500000);
+
+  // 1) Lecture paginée de tous les messages (curseur par snapshot → robuste aux timestamps égaux)
+  const docs = [];
+  let cursor = null;
+  while (docs.length < cap) {
+    let q = fsdb.collection('messages').orderBy('timestamp', 'desc').limit(5000);
+    if (cursor) q = q.startAfter(cursor);
+    const snap = await q.get();
+    if (snap.empty) break;
+    snap.forEach(d => docs.push({ docId: d.id, data: d.data() }));
+    cursor = snap.docs[snap.docs.length - 1];
+    if (snap.size < 5000) break;
+  }
+
+  // 2) Regroupement par clé de contenu déterministe
+  const groups = new Map();
+  for (const d of docs) {
+    const k = contentKey(d.data);
+    (groups.get(k) || groups.set(k, []).get(k)).push(d);
+  }
+
+  // 3) Pour chaque groupe à doublons : choisir le gardien et préparer le nettoyage
+  const score = (data) => (data.status ? 2 : 0) + (data.is_read ? 1 : 0); // statut > lu > rien
+  const toDelete = [];        // docIds Firestore à supprimer
+  const toWrite  = [];        // lignes canoniques à (ré)écrire
+  let dupGroups = 0, dupDocs = 0;
+
+  for (const [canonicalId, list] of groups) {
+    if (list.length < 2) continue;
+    dupGroups++;
+    dupDocs += list.length - 1;
+    // gardien : meilleur statut, puis le plus ancien (received_at le plus bas)
+    list.sort((a, b) =>
+      score(b.data) - score(a.data) ||
+      (a.data.received_at || 0) - (b.data.received_at || 0));
+    const keep = list[0];
+    const canonRow = msgRow({ ...keep.data, id: canonicalId });
+    toWrite.push(canonRow);
+    // tous les anciens docs du groupe sont supprimés (y compris l'ancien id du gardien)
+    for (const d of list) toDelete.push(d.docId);
+  }
+
+  if (dryRun) {
+    return res.json({ ok: true, dryRun: true, scanned: docs.length,
+      duplicateGroups: dupGroups, duplicatesToRemove: dupDocs });
+  }
+
+  // 4) Appliquer — Firestore : supprimer les anciens docs, puis écrire les canoniques
+  for (let i = 0; i < toDelete.length; i += 450) {
+    const batch = fsdb.batch();
+    for (const docId of toDelete.slice(i, i + 450)) batch.delete(fsdb.collection('messages').doc(docId));
+    try { await batch.commit(); } catch (e) { console.error('[dedup] delete batch:', e.message); }
+  }
+  await fsBatchSet('messages', toWrite, r => r.id);
+
+  // 5) Miroir SQLite (pour que l'affichage soit propre sans attendre un redéploiement)
+  const delLocal = db.prepare('DELETE FROM messages WHERE id=?');
+  const insLocal = db.prepare(`INSERT OR REPLACE INTO messages
+    (id,device_id,device_name,type,sender,sender_name,content,app_name,app_package,call_type,call_duration,timestamp,received_at,is_read,status)
+    VALUES (@id,@device_id,@device_name,@type,@sender,@sender_name,@content,@app_name,@app_package,@call_type,@call_duration,@timestamp,@received_at,@is_read,@status)`);
+  db.transaction(() => {
+    for (const docId of toDelete) delLocal.run(docId.replace(/_SLASH_/g, '/'));
+    for (const r of toWrite) { delLocal.run(r.id); insLocal.run(r); }
+  })();
+
+  io.emit('messages_deduped', { removed: dupDocs, groups: dupGroups });
+  console.log(`[dedup] ${dupGroups} groupes, ${dupDocs} doublons supprimés.`);
+  res.json({ ok: true, scanned: docs.length, duplicateGroups: dupGroups, duplicatesRemoved: dupDocs });
 });
 
 // ── Routes : Admin – Utilisateurs ───────────────────────────────────────────
