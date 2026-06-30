@@ -77,20 +77,25 @@ function classify(msg) {
 /**
  * Clé de déduplication déterministe d'un message.
  * Pour les SMS transactionnels (Wave/OMCI/Moov/MobileMoney), le CONTENU est
- * naturellement unique : il porte une « Reference » et un « Solde » propres à
- * chaque transaction. On déduplique donc sur le contenu normalisé seul — ainsi
- * deux captures/renvois du même SMS fusionnent même si leur horodatage ou leur
- * device_id diffère (cause des doublons observés). Les messages SANS contenu
- * (appels, notifs vides) gardent une clé stricte par événement pour ne jamais
- * être fusionnés à tort.
+ * naturellement unique (« Reference » + « Solde » propres à chaque transaction) :
+ * on déduplique sur le contenu normalisé seul → deux captures du même SMS
+ * fusionnent même si horodatage/device_id diffèrent.
+ * Pour TOUT le reste (Telegram, Gmail, YouTube, alertes de bots, appels…), un
+ * texte identique peut correspondre à des événements distincts : on garde donc
+ * une clé STRICTE par événement (n'unifie que des renvois exactement identiques).
  */
 function contentKey(m) {
-  const c = (m.content || '').replace(/\s+/g, ' ').trim();
-  if (c) return 'm_' + crypto.createHash('sha1').update(c).digest('hex');
+  const eff   = m.sender_name || m.sender || m.app_name || '';
+  const isTxn = (m.type === 'sms') || ALLOWED_SENDERS.has(normKey(eff));
+  const c     = (m.content || '').replace(/\s+/g, ' ').trim();
+  if (isTxn && c) {
+    return 'm_' + crypto.createHash('sha1').update(c).digest('hex');
+  }
   const parts = [
     m.device_id || 'unknown',
     m.type || 'notification',
     m.sender || m.sender_name || '',
+    m.content || '',
     m.timestamp || '',
     m.call_type || '',
     m.call_duration || '',
