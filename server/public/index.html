@@ -431,6 +431,24 @@ function escHtml(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
+// Formatage VISUEL des montants (n'altère jamais le contenu stocké → super-bot intact).
+// Sépare les milliers par une espace insécable et retire les décimales (.00 / .40 …).
+// Ex : "10000.00F" → "10 000 F", "20302.40F" → "20 302 F".
+const MONEY_SEP = '\u00A0'; // séparateur de milliers (changer en '.' ici si besoin)
+function fmtMoney(text) {
+  return String(text||'').replace(
+    /(?<![A-Za-z0-9.,])(\d[\d.,\u00a0\u202f ]*\d|\d)\s*(FCFA|XOF|CFA|F)\b/gi,
+    (full, num, cur) => {
+      let s = num.replace(/[\u00a0\u202f ]/g, '');  // retire espaces (milliers)
+      s = s.replace(/[.,]\d{1,2}$/, '');            // retire décimales de fin
+      s = s.replace(/[.,]/g, '');                   // retire séparateurs restants
+      if (!/^\d+$/.test(s)) return full;            // sécurité: sinon on ne touche à rien
+      const grouped = s.replace(/\B(?=(\d{3})+(?!\d))/g, MONEY_SEP);
+      return grouped + '\u00A0' + cur.toUpperCase();
+    }
+  );
+}
+
 function updateUnreadBadge() {
   const total = allSenders.reduce((sum,s)=>sum+(s.unread||0),0);
   const el = document.getElementById('unread-badge');
@@ -535,7 +553,7 @@ function buildCard(m) {
   const senderName = m.sender_name || m.sender || m.app_name || '';
   const isMoney = /Mobile\s*Money|Moov\s*Money/i.test(senderName);
   let phoneHighlight = '';
-  let bodyHtml = escHtml(contentTxt);
+  let bodyHtml = fmtMoney(escHtml(contentTxt));
   if (isMoney) {
     const phoneMatch = content.match(/225(0\d{9})\b/);
     if (phoneMatch) {
