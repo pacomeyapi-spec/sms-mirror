@@ -23,6 +23,7 @@ const SECRET_KEY         = process.env.SECRET_KEY         || 'changez-moi-' + Ma
 const DASHBOARD_PASSWORD = process.env.DASHBOARD_PASSWORD || 'admin123';
 const DEVICE_TOKEN       = process.env.DEVICE_TOKEN       || 'token-android-' + Math.random().toString(36).slice(2, 10);
 const HYDRATE_LIMIT      = parseInt(process.env.HYDRATE_LIMIT || '40000', 10); // messages récents chargés en SQLite au boot
+const MSG_KEEP           = parseInt(process.env.MSG_KEEP || '45000', 10);       // plafond de lignes messages gardées dans SQLite
 
 console.log('─────────────────────────────────────────────');
 console.log('  SMS Mirror – Démarrage du serveur');
@@ -131,6 +132,14 @@ const _dbPath = process.env.DB_PATH || 'sms_mirror.db';
 const _dbDir = require('path').dirname(_dbPath);
 if (_dbDir !== '.') require('fs').mkdirSync(_dbDir, { recursive: true });
 const db = new Database(_dbPath);
+
+// Réglages de stockage : WAL + journal borné pour empêcher le fichier de gonfler.
+try {
+  db.pragma('journal_mode = WAL');
+  db.pragma('synchronous = NORMAL');
+  db.pragma('wal_autocheckpoint = 1000');           // checkpoint régulier
+  db.pragma('journal_size_limit = 67108864');       // WAL plafonné à 64 Mo
+} catch (e) { console.error('[DB] PRAGMA:', e.message); }
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS messages (
@@ -274,6 +283,26 @@ async function hydrate() {
   db.transaction(() => msnap.forEach(d => insMsg.run(msgRow(d.data()))))();
 
   console.log(`[Firestore] ✓ Hydraté : ${dsnap.size} appareils, ${usnap.size} utilisateurs, ${msnap.size} messages récents (limite ${HYDRATE_LIMIT}).`);
+}
+
+/**
+ * Élague SQLite pour ne garder que les MSG_KEEP messages les plus récents.
+ * N'agit QUE sur le cache local — Firestore conserve tout l'historique (statuts inclus).
+ * Empêche le fichier SQLite (et donc le volume) de grossir sans fin.
+ */
+function pruneMessages() {
+  try {
+    const total = db.prepare('SELECT COUNT(*) c FROM messages').get().c;
+    if (total <= MSG_KEEP) return 0;
+    const info = db.prepare(
+      `DELETE FROM messages WHERE id IN (
+         SELECT id FROM messages ORDER BY timestamp DESC LIMIT -1 OFFSET ?
+       )`).run(MSG_KEEP);
+    // Rendre l'espace au système si la base est en mode incremental (après un /compact)
+    try { db.pragma('incremental_vacuum'); } catch {}
+    if (info.changes) console.log(`[prune] ${info.changes} anciens messages retirés du cache local (garde ${MSG_KEEP}).`);
+    return info.changes;
+  } catch (e) { console.error('[prune]', e.message); return 0; }
 }
 
 // ── Express + Socket.io ──────────────────────────────────────────────────────
@@ -606,6 +635,34 @@ app.post('/api/admin/dedup', requireDashboardAuth, requireAdmin, async (req, res
   res.json({ ok: true, scanned: docs.length, duplicateGroups: dupGroups, duplicatesRemoved: dupDocs });
 });
 
+// ── Compactage du cache SQLite (reprise d'espace disque du volume) ────────────
+// Élague au plus MSG_KEEP messages, bascule en auto_vacuum incrémental, puis VACUUM.
+// Ne touche jamais Firestore. À lancer une fois quand le volume se remplit.
+app.post('/api/admin/compact', requireDashboardAuth, requireAdmin, (req, res) => {
+  const fs = require('fs');
+  const sizeOf = () => ['', '-wal', '-shm', '-journal'].reduce((s, ext) => {
+    try { return s + fs.statSync(_dbPath + ext).size; } catch { return s; }
+  }, 0);
+  const before = sizeOf();
+  try {
+    const removed = pruneMessages();
+    try { db.pragma('wal_checkpoint(TRUNCATE)'); } catch {}
+    // Passer la base en auto-vacuum incrémental pour les futures reprises d'espace,
+    // puis compacter physiquement le fichier maintenant.
+    try { db.pragma('auto_vacuum = INCREMENTAL'); } catch {}
+    db.exec('VACUUM');
+    try { db.pragma('wal_checkpoint(TRUNCATE)'); } catch {}
+    const after = sizeOf();
+    const mb = n => Math.round(n / 1048576 * 10) / 10;
+    console.log(`[compact] ${mb(before)}→${mb(after)} Mo (retirés: ${removed}).`);
+    res.json({ ok: true, removed, before_mb: mb(before), after_mb: mb(after),
+      freed_mb: mb(before - after), remaining_rows: db.prepare('SELECT COUNT(*) c FROM messages').get().c });
+  } catch (e) {
+    console.error('[compact]', e.message);
+    res.status(500).json({ error: e.message, before_mb: Math.round(before / 1048576 * 10) / 10 });
+  }
+});
+
 // ── Routes : Admin – Utilisateurs ───────────────────────────────────────────
 app.get('/api/admin/users', requireDashboardAuth, requireAdmin, (req, res) => {
   const users    = db.prepare("SELECT id,username,role,is_active,created_at FROM users ORDER BY created_at ASC").all();
@@ -759,6 +816,8 @@ io.on('connection', (socket) => {
 // ── Démarrage (asynchrone : hydratation puis écoute) ─────────────────────────
 async function main() {
   await hydrate();
+  pruneMessages();                                   // borne le cache local dès le boot
+  setInterval(pruneMessages, 6 * 60 * 60 * 1000);    // puis toutes les 6 h
 
   // Compte admin par défaut
   const adminExists = db.prepare("SELECT id FROM users WHERE role='admin'").get();
