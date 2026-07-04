@@ -69,8 +69,12 @@ function classify(msg) {
   const eff = msg.sender_name || msg.sender || msg.app_name || '';
   const k   = normKey(eff);
   const ck  = normKey(msg.content || '');
-  // Wave (perso) « Transfert reçu » → bascule sous Wave Business
-  if (k === 'wave' && ck.includes('transfertrecu')) return { keep: true, override: 'Wave Business' };
+  const pkg = (msg.app_package || '').toLowerCase();
+  const isWavePerso = k === 'wave' || pkg === 'com.wave.personal';
+  // Wave (perso) « Transfert reçu » → bascule sous Wave Business (le super-bot y lit les dépôts entrants)
+  if (isWavePerso && ck.includes('transfertrecu')) return { keep: true, override: 'Wave Business' };
+  // Autres notifications Wave perso → gardées et visibles sous « Wave Personnel » (agents)
+  if (isWavePerso) return { keep: true, override: 'Wave Personnel' };
   if (ALLOWED_SENDERS.has(k)) return { keep: true, override: null };
   return { keep: false, override: null };
 }
