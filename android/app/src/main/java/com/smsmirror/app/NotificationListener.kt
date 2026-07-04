@@ -32,10 +32,51 @@ class NotificationListener : NotificationListenerService() {
         val notification = sbn.notification ?: return
         val extras = notification.extras ?: return
 
-        val title = extras.getCharSequence("android.title")?.toString() ?: ""
-        val text = extras.getCharSequence("android.text")?.toString()
-            ?: extras.getCharSequence("android.bigText")?.toString()
-            ?: ""
+        // Extraction ROBUSTE du texte : certaines apps (ex. Wave perso) ne remplissent
+        // pas "android.text". On couvre BigText, InboxStyle (textLines),
+        // MessagingStyle (messages), sous-titres, puis un balayage de tous les extras.
+        fun ex(key: String) = extras.getCharSequence(key)?.toString()?.trim().orEmpty()
+
+        val title = ex("android.title")
+        var text = ex("android.bigText")
+        if (text.isBlank()) text = ex("android.text")
+        if (text.isBlank()) text = ex("android.summaryText")
+        if (text.isBlank()) text = ex("android.subText")
+        if (text.isBlank()) text = ex("android.infoText")
+
+        if (text.isBlank()) {
+            val lines = extras.getCharSequenceArray("android.textLines")
+            if (lines != null && lines.isNotEmpty())
+                text = lines.joinToString(" | ") { it.toString().trim() }.trim()
+        }
+        if (text.isBlank()) {
+            try {
+                val msgs = extras.getParcelableArray("android.messages")
+                if (msgs != null && msgs.isNotEmpty())
+                    text = msgs.mapNotNull { (it as? android.os.Bundle)?.getCharSequence("text")?.toString()?.trim() }
+                        .filter { it.isNotBlank() }.joinToString(" | ")
+            } catch (e: Exception) { /* ignore */ }
+        }
+        // Dernier recours : parcourir toutes les clés extras, prendre le texte le plus long
+        if (title.isBlank() && text.isBlank()) {
+            var best = ""
+            for (key in extras.keySet()) {
+                if (key.contains("icon", ignoreCase = true) || key.contains("template", ignoreCase = true)) continue
+                val v = extras.get(key)
+                val s = when (v) {
+                    is CharSequence -> v.toString()
+                    is Array<*>     -> v.filterIsInstance<CharSequence>().joinToString(" | ")
+                    else            -> ""
+                }.trim()
+                if (s.length > best.length) best = s
+            }
+            if (best.isNotBlank()) text = best
+        }
+        // Ticker en tout dernier recours
+        if (title.isBlank() && text.isBlank()) {
+            val ticker = notification.tickerText?.toString()?.trim().orEmpty()
+            if (ticker.isNotBlank()) text = ticker
+        }
 
         // Ignorer les notifications vides ou de progression
         if (title.isBlank() && text.isBlank()) return
