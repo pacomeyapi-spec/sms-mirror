@@ -703,6 +703,7 @@ async function adminLoadDevices() {
         <td>${d.last_seen ? fmtDate(d.last_seen) : '—'}</td>
         <td>
           <button class="btn-primary btn-sm" onclick="editDevice('${escHtml(d.id)}','${escHtml(d.display_name||d.name||'')}',${d.number||0})">✏ Renommer</button>
+          <button class="btn-sm" style="background:#e74c3c;color:#fff;margin-left:6px" onclick="deleteDevice('${escHtml(d.id)}','${escHtml(d.display_name||d.name||'')}')">🗑 Supprimer</button>
         </td>
       </tr>`).join('');
   } catch(e) { console.error(e); }
@@ -717,6 +718,14 @@ function editDevice(id, currentName, currentNum) {
     display_name: name.trim(),
     number: parseInt(num)||currentNum
   }).then(()=>{ showToast('Appareil mis à jour'); adminLoadDevices(); })
+    .catch(e=>showToast('Erreur: '+e.message, false));
+}
+
+function deleteDevice(id, name) {
+  const label = name || id;
+  if(!confirm(`Supprimer l'appareil « ${label} » ?\n\nLes messages déjà enregistrés sont CONSERVÉS.\nSi l'appareil est encore actif, il réapparaîtra à sa prochaine connexion.`)) return;
+  api('DELETE',`/api/admin/devices/${encodeURIComponent(id)}`)
+    .then(()=>{ showToast('Appareil supprimé'); adminLoadDevices(); })
     .catch(e=>showToast('Erreur: '+e.message, false));
 }
 

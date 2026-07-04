@@ -797,6 +797,33 @@ app.put('/api/admin/devices/:id', requireDashboardAuth, requireAdmin, async (req
   res.json({ ok: true });
 });
 
+// Suppression d'un appareil (admin). Par défaut, les MESSAGES sont CONSERVÉS.
+// Ajouter ?withMessages=1 pour aussi supprimer les messages de cet appareil.
+app.delete('/api/admin/devices/:id', requireDashboardAuth, requireAdmin, async (req, res) => {
+  const id  = req.params.id;
+  const dev = db.prepare("SELECT * FROM devices WHERE id=?").get(id);
+  if (!dev) return res.status(404).json({ error: 'Appareil introuvable' });
+  const withMessages = req.query.withMessages === '1' || req.query.withMessages === 'true';
+  // Permissions liées (SQLite + Firestore)
+  const perms = db.prepare("SELECT user_id, device_id FROM device_permissions WHERE device_id=?").all(id);
+  db.prepare("DELETE FROM device_permissions WHERE device_id=?").run(id);
+  for (const p of perms) await fsDelete('device_permissions', `${p.user_id}__${p.device_id}`);
+  // Messages : conservés par défaut
+  let messagesDeleted = 0;
+  if (withMessages) {
+    const msgs = db.prepare("SELECT id FROM messages WHERE device_id=?").all(id);
+    messagesDeleted = msgs.length;
+    db.prepare("DELETE FROM messages WHERE device_id=?").run(id);
+    for (const m of msgs) await fsDelete('messages', m.id);
+  }
+  // L'appareil lui-même (SQLite + Firestore)
+  db.prepare("DELETE FROM devices WHERE id=?").run(id);
+  await fsDelete('devices', id);
+  io.emit('device_removed', { device_id: id });
+  console.log(`[Appareil] supprimé: ${dev.display_name||dev.name||id}${withMessages?` (+${messagesDeleted} messages)`:' (messages conservés)'}`);
+  res.json({ ok: true, deleted: id, messagesDeleted });
+});
+
 // ── WebSocket ────────────────────────────────────────────────────────────────
 const socketUsers = new Map();
 io.on('connection', (socket) => {
