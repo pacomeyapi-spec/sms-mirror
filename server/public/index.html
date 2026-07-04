@@ -210,6 +210,8 @@ header .hbtn.active{background:rgba(255,255,255,.3);box-shadow:inset 0 0 0 1.5px
       <div class="admin-card">
         <h3>Appareils enregistrés</h3>
         <p style="font-size:.83rem;color:#888;margin-bottom:14px">Chaque appareil Android où l'application est installée est listé ci-dessous avec son numéro d'identification.</p>
+        <button class="btn-sm" style="background:#8e44ad;color:#fff;margin-bottom:12px" onclick="showDropped()">🐞 Voir messages ignorés (debug)</button>
+        <div id="dropped-box" style="display:none;margin-bottom:14px;max-height:340px;overflow:auto;border:1px solid #eee;border-radius:8px;padding:8px;font-size:.78rem;font-family:monospace"></div>
         <table class="admin-table" id="devices-table">
           <thead><tr><th>N°</th><th>Nom affiché</th><th>ID appareil</th><th>Plateforme</th><th>Dernière activité</th><th>Actions</th></tr></thead>
           <tbody id="devices-tbody"></tbody>
@@ -727,6 +729,24 @@ function deleteDevice(id, name) {
   api('DELETE',`/api/admin/devices/${encodeURIComponent(id)}`)
     .then(()=>{ showToast('Appareil supprimé'); adminLoadDevices(); })
     .catch(e=>showToast('Erreur: '+e.message, false));
+}
+
+async function showDropped() {
+  const box = document.getElementById('dropped-box');
+  box.style.display = 'block';
+  box.innerHTML = 'Chargement…';
+  try {
+    const rows = await api('GET','/api/admin/debug/dropped');
+    if(!rows.length){ box.innerHTML = '<em style="color:#888">Aucun message ignoré récemment. Déclenche une notification Wave perso puis reclique.</em>'; return; }
+    box.innerHTML = rows.map(r => {
+      const t = new Date(r.ts).toLocaleTimeString();
+      return `<div style="padding:6px 0;border-bottom:1px solid #f0f0f0">
+        <div><strong>app_name:</strong> ${escHtml(r.app_name||'∅')} &nbsp; <strong>package:</strong> ${escHtml(r.app_package||'∅')}</div>
+        <div><strong>sender:</strong> ${escHtml(r.sender||'∅')} / ${escHtml(r.sender_name||'∅')} &nbsp; <span style="color:#aaa">${t} · ${escHtml(r.device||'?')}</span></div>
+        <div style="color:#555">${escHtml(r.content||'')}</div>
+      </div>`;
+    }).join('');
+  } catch(e) { box.innerHTML = '<span style="color:#c00">Erreur: '+escHtml(e.message)+'</span>'; }
 }
 
 // ── Admin – Utilisateurs ──────────────────────────────────────────────────────

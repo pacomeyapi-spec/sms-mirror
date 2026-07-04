@@ -387,6 +387,21 @@ app.post('/api/device/register', requireDeviceAuth, async (req, res) => {
   res.json({ ok: true });
 });
 
+// Tampon de débogage : derniers messages IGNORÉS par la liste blanche (pour diagnostic)
+const droppedLog = [];
+function pushDropped(msg) {
+  droppedLog.unshift({
+    app_name:    msg.app_name    || null,
+    app_package: msg.app_package || null,
+    sender:      msg.sender      || null,
+    sender_name: msg.sender_name || null,
+    content:     (msg.content || '').slice(0, 140),
+    device:      msg.device_name || msg.device_id || null,
+    ts:          Date.now(),
+  });
+  if (droppedLog.length > 80) droppedLog.length = 80;
+}
+
 // Réception des messages depuis Android (avec LISTE BLANCHE)
 app.post('/api/messages', requireDeviceAuth, async (req, res) => {
   const messages = Array.isArray(req.body) ? req.body : [req.body];
@@ -402,7 +417,7 @@ app.post('/api/messages', requireDeviceAuth, async (req, res) => {
   db.transaction((msgs) => {
     for (const msg of msgs) {
       const verdict = classify(msg);
-      if (!verdict.keep) { dropped++; continue; }   // ← expéditeur non autorisé : ignoré
+      if (!verdict.keep) { dropped++; pushDropped(msg); continue; }   // ← expéditeur non autorisé : ignoré
       // Wave perso « Transfert reçu » (override = Wave Business) → corriger le montant (reçu ÷ 0,99)
       let _content = msg.content || null;
       if (verdict.override === 'Wave Business') _content = correctWavePersoAmount(_content);
@@ -826,6 +841,11 @@ app.delete('/api/admin/devices/:id', requireDashboardAuth, requireAdmin, async (
   io.emit('device_removed', { device_id: id });
   console.log(`[Appareil] supprimé: ${dev.display_name||dev.name||id}${withMessages?` (+${messagesDeleted} messages)`:' (messages conservés)'}`);
   res.json({ ok: true, deleted: id, messagesDeleted });
+});
+
+// Débogage : derniers messages IGNORÉS par la liste blanche (pour voir ce que les apps envoient réellement)
+app.get('/api/admin/debug/dropped', requireDashboardAuth, requireAdmin, (req, res) => {
+  res.json(droppedLog);
 });
 
 // ── WebSocket ────────────────────────────────────────────────────────────────
