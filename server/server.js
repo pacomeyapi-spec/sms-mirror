@@ -936,18 +936,36 @@ function parseReference(content) {
 
 app.post('/api/export/pdf', requireDashboardAuth, requireAdmin, (req, res) => {
   try {
-    let { senders, from, to } = req.body || {};
-    if (!Array.isArray(senders) || !senders.length) return res.status(400).json({ error: 'Sélectionne au moins un expéditeur' });
+    let { senders, users, from, to } = req.body || {};
+    senders = Array.isArray(senders) ? senders : [];
+    users   = Array.isArray(users) ? users.map(Number).filter(Boolean) : [];
+    if (!senders.length && !users.length) return res.status(400).json({ error: 'Sélectionne au moins un expéditeur ou un utilisateur' });
     const fromTs = from ? Date.parse(from + 'T00:00:00Z') : 0;
     const toTs   = to   ? Date.parse(to   + 'T23:59:59.999Z') : Date.now();
-    const ph = senders.map(() => '?').join(',');
+
+    const clauses = [], params = [];
+    clauses.push("COALESCE(timestamp, received_at) BETWEEN ? AND ?"); params.push(fromTs, toTs);
+    // cohérence avec l'affichage : on masque les transferts SORTANTS de +454
+    clauses.push("NOT (COALESCE(sender_name, sender, app_name, '') IN ('+454','454') AND LOWER(COALESCE(content,'')) LIKE '%vers le%')");
+    if (senders.length) {
+      clauses.push(`COALESCE(sender_name, sender, app_name, '') IN (${senders.map(() => '?').join(',')})`);
+      params.push(...senders);
+    }
+    // Filtre par utilisateur(s) : messages provenant des APPAREILS autorisés de ces agents
+    let userLabel = '';
+    if (users.length) {
+      const uph = users.map(() => '?').join(',');
+      const devs = db.prepare(`SELECT DISTINCT device_id FROM device_permissions WHERE user_id IN (${uph})`).all(...users).map(r => r.device_id);
+      userLabel = db.prepare(`SELECT username FROM users WHERE id IN (${uph})`).all(...users).map(u => u.username).join(', ');
+      if (!devs.length) { clauses.push('1=0'); }   // agent(s) sans appareil → aucune transaction
+      else { clauses.push(`device_id IN (${devs.map(() => '?').join(',')})`); params.push(...devs); }
+    }
     const rows = db.prepare(`
-      SELECT sender_name, sender, app_name, content, timestamp, received_at
+      SELECT sender_name, sender, app_name, content, timestamp, received_at, device_id
       FROM messages
-      WHERE COALESCE(sender_name, sender, app_name, '') IN (${ph})
-        AND COALESCE(timestamp, received_at) BETWEEN ? AND ?
+      WHERE ${clauses.join(' AND ')}
       ORDER BY COALESCE(timestamp, received_at) ASC
-    `).all(...senders, fromTs, toTs);
+    `).all(...params);
 
     const items = [];
     for (const r of rows) {
@@ -973,9 +991,10 @@ app.post('/api/export/pdf', requireDashboardAuth, requireAdmin, (req, res) => {
 
     doc.fontSize(16).font('Helvetica-Bold').text('Export des transactions — YapsonPress', { align: 'center' });
     doc.moveDown(0.3);
-    doc.fontSize(9).font('Helvetica').fillColor('#555')
-       .text(`Expéditeur(s) : ${senders.join(', ')}`, { align: 'center' })
-       .text(`Période : ${from || 'début'} → ${to || 'fin'}   |   ${items.length} transaction(s)`, { align: 'center' });
+    doc.fontSize(9).font('Helvetica').fillColor('#555');
+    if (senders.length) doc.text(`Expéditeur(s) : ${senders.join(', ')}`, { align: 'center' });
+    if (userLabel)      doc.text(`Utilisateur(s) : ${userLabel}`, { align: 'center' });
+    doc.text(`Période : ${from || 'début'} → ${to || 'fin'}   |   ${items.length} transaction(s)`, { align: 'center' });
     doc.fillColor('#000').moveDown(0.8);
 
     const cols = [

@@ -283,6 +283,8 @@ header .hbtn.active{background:rgba(255,255,255,.3);box-shadow:inset 0 0 0 1.5px
       <p style="font-size:.83rem;color:#888;margin-bottom:14px">Choisis un ou plusieurs expéditeurs et une plage de dates. Le PDF contiendra, pour chaque transaction : <strong>date, expéditeur, numéro, montant et référence</strong> (extraits du message).</p>
       <div style="margin-bottom:6px;font-size:.75rem;color:#888">Expéditeurs</div>
       <div id="export-senders" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px"></div>
+      <div style="margin-bottom:6px;font-size:.75rem;color:#888">Utilisateurs (agents) — optionnel, filtre par leurs appareils</div>
+      <div id="export-users" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px"></div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px">
         <div><label style="font-size:.72rem;color:#888;display:block;margin-bottom:2px">Du</label><input type="date" id="export-from" style="padding:6px;border:1px solid #ddd;border-radius:6px"></div>
         <div><label style="font-size:.72rem;color:#888;display:block;margin-bottom:2px">Au</label><input type="date" id="export-to" style="padding:6px;border:1px solid #ddd;border-radius:6px"></div>
@@ -848,11 +850,19 @@ async function deleteSchedule(id) {
 // ── Export PDF ───────────────────────────────────────────────────────────────
 async function loadExportSenders() {
   try {
-    const senders = await api('GET','/api/admin/senders');
+    const [senders, users] = await Promise.all([
+      api('GET','/api/admin/senders'),
+      api('GET','/api/admin/users')
+    ]);
     const box = document.getElementById('export-senders');
     box.innerHTML = (senders&&senders.length)
       ? senders.map(d=>`<label style="display:flex;align-items:center;gap:5px;font-size:.85rem;border:1px solid #ddd;border-radius:6px;padding:5px 9px;cursor:pointer"><input type="checkbox" class="exp-sender" value="${escHtml(d.sender)}">${escHtml(d.sender)}</label>`).join('')
       : '<em style="color:#aaa">Aucun expéditeur</em>';
+    const agents = (users||[]).filter(u => u.role !== 'admin');
+    const ubox = document.getElementById('export-users');
+    ubox.innerHTML = agents.length
+      ? agents.map(u=>`<label style="display:flex;align-items:center;gap:5px;font-size:.85rem;border:1px solid #ddd;border-radius:6px;padding:5px 9px;cursor:pointer"><input type="checkbox" class="exp-user" value="${u.id}">${escHtml(u.username)}</label>`).join('')
+      : '<em style="color:#aaa">Aucun agent</em>';
     const today = new Date().toISOString().slice(0,10);
     const f = document.getElementById('export-from'), t = document.getElementById('export-to');
     if(!f.value) f.value = today;
@@ -861,16 +871,17 @@ async function loadExportSenders() {
 }
 async function exportPdf() {
   const senders = [...document.querySelectorAll('.exp-sender:checked')].map(c=>c.value);
+  const users   = [...document.querySelectorAll('.exp-user:checked')].map(c=>parseInt(c.value));
   const from = document.getElementById('export-from').value;
   const to   = document.getElementById('export-to').value;
   const status = document.getElementById('export-status');
-  if(!senders.length){ showToast('Sélectionne au moins un expéditeur', false); return; }
+  if(!senders.length && !users.length){ showToast('Sélectionne au moins un expéditeur ou un utilisateur', false); return; }
   status.textContent = 'Génération du PDF en cours…';
   try {
     const r = await fetch('/api/export/pdf', {
       method:'POST',
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
-      body: JSON.stringify({ senders, from, to })
+      body: JSON.stringify({ senders, users, from, to })
     });
     if(!r.ok){ const e = await r.json().catch(()=>({})); throw new Error(e.error || ('HTTP '+r.status)); }
     const blob = await r.blob();
