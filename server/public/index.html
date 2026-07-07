@@ -202,7 +202,8 @@ header .hbtn.active{background:rgba(255,255,255,.3);box-shadow:inset 0 0 0 1.5px
     <button class="admin-tab active" onclick="switchAdminTab('devices')">📱 Appareils</button>
     <button class="admin-tab" onclick="switchAdminTab('users')">👤 Utilisateurs</button>
   
-    <button class="admin-tab" onclick="switchAdminTab('senders'); loadAdminSenders()">📨 Expéditeurs</button></div>
+    <button class="admin-tab" onclick="switchAdminTab('senders'); loadAdminSenders()">📨 Expéditeurs</button>
+    <button class="admin-tab" onclick="switchAdminTab('schedules')">⏰ Programmation</button></div>
   <div class="admin-body">
 
     <!-- Onglet Appareils -->
@@ -250,6 +251,29 @@ header .hbtn.active{background:rgba(255,255,255,.3);box-shadow:inset 0 0 0 1.5px
     <h2>Gestion des Expéditeurs</h2>
     <p style="color:#666;margin-bottom:16px;">Toutes les sources de messages détectées. Épinglez celles que vous souhaitez rendre visibles aux utilisateurs.</p>
     <div id="senders-list" style="display:grid;gap:8px;"></div>
+  </div>
+
+  <div id="tab-schedules" class="admin-section">
+    <div class="admin-card">
+      <h3>⏰ Programmation des expéditeurs</h3>
+      <p style="font-size:.83rem;color:#888;margin-bottom:14px">Planifiez l'activation (cocher) ou la désactivation (décocher) automatique d'un expéditeur pour un agent, à heure fixe — <strong>heure d'Abidjan</strong>. Exemple : activer « Wave Business » pour l'agent GOLD à 06:00, le désactiver à 14:00. Une programmation se déclenche chaque jour.</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:16px">
+        <div><label style="font-size:.72rem;color:#888;display:block;margin-bottom:2px">Agent</label><select id="sch-user" style="padding:7px;border:1px solid #ddd;border-radius:6px"></select></div>
+        <div><label style="font-size:.72rem;color:#888;display:block;margin-bottom:2px">Expéditeur</label><select id="sch-sender" style="padding:7px;border:1px solid #ddd;border-radius:6px"></select></div>
+        <div><label style="font-size:.72rem;color:#888;display:block;margin-bottom:2px">Action</label><select id="sch-action" style="padding:7px;border:1px solid #ddd;border-radius:6px"><option value="enable">✓ Activer (cocher)</option><option value="disable">✗ Désactiver (décocher)</option></select></div>
+        <div><label style="font-size:.72rem;color:#888;display:block;margin-bottom:2px">Heure</label><input type="time" id="sch-time" value="06:00" style="padding:6px;border:1px solid #ddd;border-radius:6px"></div>
+        <div style="display:flex;gap:4px">
+          <button class="btn-sm" onclick="document.getElementById('sch-time').value='06:00'">6h</button>
+          <button class="btn-sm" onclick="document.getElementById('sch-time').value='14:00'">14h</button>
+          <button class="btn-sm" onclick="document.getElementById('sch-time').value='22:00'">22h</button>
+        </div>
+        <button class="btn-primary btn-sm" onclick="addSchedule()">+ Programmer</button>
+      </div>
+      <table class="admin-table" id="schedules-table">
+        <thead><tr><th>Agent</th><th>Expéditeur</th><th>Action</th><th>Heure</th><th>État</th><th></th></tr></thead>
+        <tbody id="schedules-tbody"></tbody>
+      </table>
+    </div>
   </div>
 
 
@@ -370,6 +394,7 @@ function switchAdminTab(tab) {
   });
   if (tab === 'senders') loadAdminSenders();
   if (tab === 'users') typeof adminLoadUsers === 'function' && adminLoadUsers();
+  if (tab === 'schedules') loadSchedules();
 }
 function showDashboard() {
   requestNotifPermission();
@@ -747,6 +772,60 @@ async function showDropped() {
       </div>`;
     }).join('');
   } catch(e) { box.innerHTML = '<span style="color:#c00">Erreur: '+escHtml(e.message)+'</span>'; }
+}
+
+// ── Programmation des expéditeurs ────────────────────────────────────────────
+async function loadScheduleOptions() {
+  const [users, senders] = await Promise.all([
+    api('GET','/api/admin/users'),
+    api('GET','/api/admin/senders')
+  ]);
+  const uSel = document.getElementById('sch-user');
+  const agents = (users||[]).filter(u => u.role !== 'admin');
+  uSel.innerHTML = agents.length ? agents.map(u=>`<option value="${u.id}">${escHtml(u.username)}</option>`).join('') : '<option value="">(aucun agent)</option>';
+  const sSel = document.getElementById('sch-sender');
+  sSel.innerHTML = (senders&&senders.length) ? senders.map(d=>`<option value="${escHtml(d.sender)}">${escHtml(d.sender)}</option>`).join('') : '<option value="">(aucun)</option>';
+}
+async function loadSchedules() {
+  try {
+    await loadScheduleOptions();
+    const rows = await api('GET','/api/admin/schedules');
+    const tb = document.getElementById('schedules-tbody');
+    if(!rows.length){ tb.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#aaa;padding:20px">Aucune programmation</td></tr>'; return; }
+    tb.innerHTML = rows.map(s => {
+      const hh = String(s.hour).padStart(2,'0'), mm = String(s.minute||0).padStart(2,'0');
+      const act = s.action==='enable' ? '<span style="color:#2e7d32">✓ Activer</span>' : '<span style="color:#c62828">✗ Désactiver</span>';
+      return `<tr>
+        <td><strong>${escHtml(s.username||('#'+s.user_id))}</strong></td>
+        <td>${escHtml(s.sender)}</td>
+        <td>${act}</td>
+        <td>${hh}:${mm}</td>
+        <td><button class="btn-sm ${s.active?'btn-success':'btn-danger'}" onclick="toggleSchedule(${s.id},${s.active?0:1})">${s.active?'Actif':'En pause'}</button></td>
+        <td><button class="btn-danger btn-sm" onclick="deleteSchedule(${s.id})">✕</button></td>
+      </tr>`;
+    }).join('');
+  } catch(e){ showToast('Erreur: '+e.message, false); }
+}
+async function addSchedule() {
+  const user_id = document.getElementById('sch-user').value;
+  const sender  = document.getElementById('sch-sender').value;
+  const action  = document.getElementById('sch-action').value;
+  const parts = (document.getElementById('sch-time').value||'06:00').split(':');
+  if(!user_id || !sender){ showToast('Choisis un agent et un expéditeur', false); return; }
+  try {
+    await api('POST','/api/admin/schedules',{ user_id, sender, action, hour: parseInt(parts[0]), minute: parseInt(parts[1])||0 });
+    showToast('Programmation ajoutée');
+    loadSchedules();
+  } catch(e){ showToast('Erreur: '+e.message, false); }
+}
+async function toggleSchedule(id, active) {
+  try { await api('PUT','/api/admin/schedules/'+id,{active}); loadSchedules(); }
+  catch(e){ showToast('Erreur: '+e.message, false); }
+}
+async function deleteSchedule(id) {
+  if(!confirm('Supprimer cette programmation ?')) return;
+  try { await api('DELETE','/api/admin/schedules/'+id); showToast('Programmation supprimée'); loadSchedules(); }
+  catch(e){ showToast('Erreur: '+e.message, false); }
 }
 
 // ── Admin – Utilisateurs ──────────────────────────────────────────────────────

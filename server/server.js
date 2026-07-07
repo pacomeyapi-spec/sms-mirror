@@ -203,6 +203,16 @@ db.exec(`
     sender     TEXT NOT NULL,
     PRIMARY KEY (user_id, sender)
   );
+  CREATE TABLE IF NOT EXISTS sender_schedules (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id   INTEGER NOT NULL,
+    sender    TEXT NOT NULL,
+    action    TEXT NOT NULL,              -- 'enable' | 'disable'
+    hour      INTEGER NOT NULL,           -- 0-23 (heure d'Abidjan = UTC)
+    minute    INTEGER NOT NULL DEFAULT 0,
+    active    INTEGER NOT NULL DEFAULT 1,
+    last_run  TEXT                        -- 'YYYY-MM-DD' du dernier déclenchement (anti-doublon)
+  );
 `);
 
 // Migrations défensives (si vieille base déjà présente)
@@ -278,6 +288,10 @@ async function hydrate() {
   const insUSP = db.prepare(`INSERT OR IGNORE INTO user_sender_permissions (user_id,sender) VALUES (@user_id,@sender)`);
   const uspsnap = await fsdb.collection('user_sender_permissions').get();
   db.transaction(() => uspsnap.forEach(d => { const v = d.data(); insUSP.run({ user_id: v.user_id, sender: v.sender }); }))();
+
+  const insSch = db.prepare(`INSERT OR REPLACE INTO sender_schedules (id,user_id,sender,action,hour,minute,active,last_run) VALUES (@id,@user_id,@sender,@action,@hour,@minute,@active,@last_run)`);
+  const schsnap = await fsdb.collection('sender_schedules').get();
+  db.transaction(() => schsnap.forEach(d => { const v = d.data(); insSch.run({ id: v.id, user_id: v.user_id, sender: v.sender, action: v.action, hour: v.hour, minute: v.minute||0, active: v.active==null?1:v.active, last_run: v.last_run||null }); }))();
 
   // Messages : on ne charge que les plus récents (working set)
   const insMsg = db.prepare(`INSERT OR REPLACE INTO messages
@@ -798,6 +812,81 @@ app.delete('/api/admin/users/:id/senders/:sender', requireDashboardAuth, require
   const { id } = req.params; const sender = decodeURIComponent(req.params.sender);
   db.prepare('DELETE FROM user_sender_permissions WHERE user_id = ? AND sender = ?').run(id, sender);
   await fsDelete('user_sender_permissions', `${id}__${sid(sender)}`);
+  res.json({ ok: true });
+});
+
+// ── PROGRAMMATION : activer/désactiver un expéditeur pour un agent à heure fixe ──
+// Applique exactement la même opération que les boutons manuels (INSERT / DELETE).
+async function applyScheduleAction(userId, sender, action) {
+  if (action === 'enable') {
+    db.prepare('INSERT OR IGNORE INTO user_sender_permissions (user_id, sender) VALUES (?, ?)').run(userId, sender);
+    await fsSet('user_sender_permissions', `${userId}__${sid(sender)}`, { user_id: parseInt(userId), sender });
+  } else {
+    db.prepare('DELETE FROM user_sender_permissions WHERE user_id = ? AND sender = ?').run(userId, sender);
+    await fsDelete('user_sender_permissions', `${userId}__${sid(sender)}`);
+  }
+  io.emit('permissions_updated', { user_id: parseInt(userId), sender, action });
+}
+
+// Boucle du planificateur : toutes les 30 s. Abidjan = UTC, on utilise donc l'heure UTC.
+// Une programmation se déclenche une fois par jour, à son heure OU juste après (rattrapage
+// si le serveur était éteint), grâce à last_run = 'YYYY-MM-DD'.
+async function runSchedules() {
+  try {
+    const now = new Date();
+    const today = now.toISOString().slice(0, 10);                 // YYYY-MM-DD (UTC)
+    const nowMin = now.getUTCHours() * 60 + now.getUTCMinutes();
+    const due = db.prepare("SELECT * FROM sender_schedules WHERE active = 1 AND (last_run IS NULL OR last_run <> ?)").all(today);
+    for (const s of due) {
+      const targetMin = s.hour * 60 + (s.minute || 0);
+      if (nowMin < targetMin) continue;                          // pas encore l'heure aujourd'hui
+      await applyScheduleAction(s.user_id, s.sender, s.action);
+      db.prepare("UPDATE sender_schedules SET last_run = ? WHERE id = ?").run(today, s.id);
+      const row = db.prepare("SELECT * FROM sender_schedules WHERE id = ?").get(s.id);
+      await fsSet('sender_schedules', String(s.id), row);
+      const uname = (db.prepare("SELECT username FROM users WHERE id=?").get(s.user_id) || {}).username || s.user_id;
+      console.log(`[Programmation] ${s.action === 'enable' ? 'ACTIVÉ' : 'DÉSACTIVÉ'} « ${s.sender} » pour ${uname} (prévu ${String(s.hour).padStart(2,'0')}:${String(s.minute||0).padStart(2,'0')})`);
+    }
+  } catch (e) { console.error('[Programmation] erreur:', e.message); }
+}
+setInterval(runSchedules, 30 * 1000);
+setTimeout(runSchedules, 5000);   // premier passage peu après le démarrage
+
+app.get('/api/admin/schedules', requireDashboardAuth, requireAdmin, (req, res) => {
+  const rows = db.prepare(`
+    SELECT s.*, u.username FROM sender_schedules s
+    LEFT JOIN users u ON u.id = s.user_id
+    ORDER BY s.hour, s.minute, u.username`).all();
+  res.json(rows);
+});
+
+app.post('/api/admin/schedules', requireDashboardAuth, requireAdmin, async (req, res) => {
+  let { user_id, sender, action, hour, minute } = req.body;
+  user_id = parseInt(user_id); hour = parseInt(hour); minute = parseInt(minute) || 0;
+  if (!user_id || !sender || !['enable','disable'].includes(action) || isNaN(hour) || hour < 0 || hour > 23 || minute < 0 || minute > 59)
+    return res.status(400).json({ error: 'Paramètres invalides' });
+  // Si l'heure du jour est déjà passée, on démarre demain (pas d'application immédiate surprise).
+  const now = new Date();
+  const passedToday = (now.getUTCHours()*60 + now.getUTCMinutes()) >= (hour*60 + minute);
+  const last_run = passedToday ? now.toISOString().slice(0,10) : null;
+  const info = db.prepare("INSERT INTO sender_schedules (user_id,sender,action,hour,minute,active,last_run) VALUES (?,?,?,?,?,1,?)")
+                 .run(user_id, sender, action, hour, minute, last_run);
+  const row = db.prepare("SELECT * FROM sender_schedules WHERE id=?").get(info.lastInsertRowid);
+  await fsSet('sender_schedules', String(row.id), row);
+  res.json({ ok: true, schedule: row });
+});
+
+app.put('/api/admin/schedules/:id', requireDashboardAuth, requireAdmin, async (req, res) => {
+  const { active } = req.body;
+  db.prepare("UPDATE sender_schedules SET active=? WHERE id=?").run(active ? 1 : 0, req.params.id);
+  const row = db.prepare("SELECT * FROM sender_schedules WHERE id=?").get(req.params.id);
+  if (row) await fsSet('sender_schedules', String(row.id), row);
+  res.json({ ok: true });
+});
+
+app.delete('/api/admin/schedules/:id', requireDashboardAuth, requireAdmin, async (req, res) => {
+  db.prepare("DELETE FROM sender_schedules WHERE id=?").run(req.params.id);
+  await fsDelete('sender_schedules', String(req.params.id));
   res.json({ ok: true });
 });
 
