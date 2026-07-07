@@ -16,6 +16,7 @@ const path       = require('path');
 const Database   = require('better-sqlite3');
 const crypto     = require('crypto');
 const { v4: uuidv4 } = require('uuid');
+const PDFDocument = require('pdfkit');
 
 // ── Configuration ────────────────────────────────────────────────────────────
 const PORT               = process.env.PORT               || 3000;
@@ -888,6 +889,134 @@ app.delete('/api/admin/schedules/:id', requireDashboardAuth, requireAdmin, async
   db.prepare("DELETE FROM sender_schedules WHERE id=?").run(req.params.id);
   await fsDelete('sender_schedules', String(req.params.id));
   res.json({ ok: true });
+});
+
+// ── EXPORT PDF des transactions ──────────────────────────────────────────────
+function normAmount(raw) {
+  let s = String(raw).replace(/[\s\u00a0]/g, '');
+  s = s.replace(/[.,]\d{2}$/, '');   // enlève décimales ,00 / .00
+  s = s.replace(/[.,]/g, '');        // enlève séparateurs de milliers
+  const n = parseInt(s, 10);
+  return isNaN(n) ? null : n;
+}
+function parsePhone(content) {
+  const c = content || '';
+  const pats = [
+    /re[çc]u\s+du\s+\+?(?:225)?\s*(0\d{9})/i,   // Orange "reçu du 07..."
+    /\(\+?(?:225)?\s*(0\d{9})\)/,                // Wave "(07...)"
+    /\bde\b[^()]*?\+?(?:225)?\s*(0\d{9})/i,      // "de NOM 07..."
+    /\+?(?:225)?\s*(0\d{9})/                     // fallback : 1er 0XXXXXXXXX
+  ];
+  for (const p of pats) { const m = c.match(p); if (m) return m[1]; }
+  return null;
+}
+function parseAmount(content) {
+  const c = (content || '').replace(/\u00a0/g, ' ');
+  const pats = [
+    /transfert de\s*([\d][\d\s.,]*)\s*F/i,
+    /avez\s+re[çc]u\s*([\d][\d\s.,]*)\s*F/i,
+    /re[çc]u(?:\s+un\s+transfert)?\s+de\s*([\d][\d\s.,]*)\s*F/i,
+    /re[çc]u[^\d]*([\d][\d\s.,]*)\s*F/i,
+    /([\d][\d\s.,]*)\s*F(?:\s?CFA)?\b/i          // fallback : 1er "X F"
+  ];
+  for (const p of pats) { const m = c.match(p); if (m) { const n = normAmount(m[1]); if (n) return n; } }
+  return null;
+}
+function parseReference(content) {
+  const c = content || '';
+  const pats = [
+    /\b(PP\d{6}\.\d+\.[A-Za-z0-9]+)\b/,                                                     // Orange PP...
+    /(?:r[ée]f[ée]rence|r[ée]f|transaction\s*id|txn|financial\s*transaction\s*id|id\s*(?:de\s*)?(?:la\s*)?transaction)\s*[:#=]?\s*([A-Za-z0-9][A-Za-z0-9._\/-]{4,})/i,
+    /\bID\s*[:#=]\s*([A-Za-z0-9][A-Za-z0-9._\/-]{4,})/i,
+    /\b[A-Z0-9]{2,}\.[A-Z0-9.]{4,}\b/                                                        // token type XX.YYYY.ZZZ
+  ];
+  for (const p of pats) { const m = c.match(p); if (m) return (m[1] || m[0]).trim(); }
+  return null;
+}
+
+app.post('/api/export/pdf', requireDashboardAuth, requireAdmin, (req, res) => {
+  try {
+    let { senders, from, to } = req.body || {};
+    if (!Array.isArray(senders) || !senders.length) return res.status(400).json({ error: 'Sélectionne au moins un expéditeur' });
+    const fromTs = from ? Date.parse(from + 'T00:00:00Z') : 0;
+    const toTs   = to   ? Date.parse(to   + 'T23:59:59.999Z') : Date.now();
+    const ph = senders.map(() => '?').join(',');
+    const rows = db.prepare(`
+      SELECT sender_name, sender, app_name, content, timestamp, received_at
+      FROM messages
+      WHERE COALESCE(sender_name, sender, app_name, '') IN (${ph})
+        AND COALESCE(timestamp, received_at) BETWEEN ? AND ?
+      ORDER BY COALESCE(timestamp, received_at) ASC
+    `).all(...senders, fromTs, toTs);
+
+    const items = [];
+    for (const r of rows) {
+      const phone = parsePhone(r.content || '');
+      const amount = parseAmount(r.content || '');
+      if (!phone || !amount) continue;   // on ne garde que les vraies transactions
+      items.push({
+        ts: r.timestamp || r.received_at,
+        sender: r.sender_name || r.sender || r.app_name || '',
+        phone, amount,
+        ref: parseReference(r.content || '') || '—'
+      });
+    }
+
+    const doc = new PDFDocument({ size: 'A4', margin: 40 });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="export_${from || 'debut'}_${to || 'fin'}.pdf"`);
+    doc.pipe(res);
+
+    const p2 = n => String(n).padStart(2, '0');
+    const fmtDate = ts => { const d = new Date(ts); return `${p2(d.getUTCDate())}/${p2(d.getUTCMonth() + 1)}/${d.getUTCFullYear()} ${p2(d.getUTCHours())}:${p2(d.getUTCMinutes())}`; };
+    const fmtAmount = n => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' F';
+
+    doc.fontSize(16).font('Helvetica-Bold').text('Export des transactions — YapsonPress', { align: 'center' });
+    doc.moveDown(0.3);
+    doc.fontSize(9).font('Helvetica').fillColor('#555')
+       .text(`Expéditeur(s) : ${senders.join(', ')}`, { align: 'center' })
+       .text(`Période : ${from || 'début'} → ${to || 'fin'}   |   ${items.length} transaction(s)`, { align: 'center' });
+    doc.fillColor('#000').moveDown(0.8);
+
+    const cols = [
+      { key: 'date',   label: 'Date',       x: 40,  w: 95 },
+      { key: 'sender', label: 'Expéditeur', x: 135, w: 90 },
+      { key: 'phone',  label: 'Numéro',     x: 225, w: 80 },
+      { key: 'amount', label: 'Montant',    x: 305, w: 80, align: 'right' },
+      { key: 'ref',    label: 'Référence',  x: 390, w: 165 },
+    ];
+    const drawHeader = (yy) => {
+      doc.font('Helvetica-Bold').fontSize(9).fillColor('#000');
+      cols.forEach(c => doc.text(c.label, c.x, yy, { width: c.w, align: c.align || 'left' }));
+      doc.moveTo(40, yy + 13).lineTo(555, yy + 13).strokeColor('#999').stroke();
+    };
+    let y = doc.y;
+    drawHeader(y); y += 18;
+
+    let total = 0;
+    doc.font('Helvetica').fontSize(8.5);
+    for (const it of items) {
+      if (y > 780) { doc.addPage(); y = 40; drawHeader(y); y += 18; doc.font('Helvetica').fontSize(8.5); }
+      const cells = { date: fmtDate(it.ts), sender: it.sender, phone: it.phone, amount: fmtAmount(it.amount), ref: it.ref };
+      cols.forEach(c => doc.fillColor('#000').text(String(cells[c.key]), c.x, y, { width: c.w, align: c.align || 'left', lineBreak: false, ellipsis: true }));
+      total += it.amount;
+      y += 15;
+    }
+
+    if (!items.length) {
+      doc.font('Helvetica-Oblique').fontSize(11).fillColor('#888').text('Aucune transaction trouvée pour cette sélection.', 40, y + 20);
+    } else {
+      doc.moveTo(40, y + 2).lineTo(555, y + 2).strokeColor('#999').stroke();
+      y += 8;
+      doc.font('Helvetica-Bold').fontSize(9).fillColor('#000');
+      doc.text('TOTAL', 225, y, { width: 80 });
+      doc.text(fmtAmount(total), 305, y, { width: 80, align: 'right' });
+    }
+    doc.end();
+  } catch (e) {
+    console.error('[Export PDF] erreur:', e.message);
+    if (!res.headersSent) res.status(500).json({ error: e.message });
+  }
 });
 
 // ── Routes : Admin – Appareils ───────────────────────────────────────────────

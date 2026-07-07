@@ -203,7 +203,8 @@ header .hbtn.active{background:rgba(255,255,255,.3);box-shadow:inset 0 0 0 1.5px
     <button class="admin-tab" onclick="switchAdminTab('users')">👤 Utilisateurs</button>
   
     <button class="admin-tab" onclick="switchAdminTab('senders'); loadAdminSenders()">📨 Expéditeurs</button>
-    <button class="admin-tab" onclick="switchAdminTab('schedules')">⏰ Programmation</button></div>
+    <button class="admin-tab" onclick="switchAdminTab('schedules')">⏰ Programmation</button>
+    <button class="admin-tab" onclick="switchAdminTab('export')">📄 Export PDF</button></div>
   <div class="admin-body">
 
     <!-- Onglet Appareils -->
@@ -273,6 +274,21 @@ header .hbtn.active{background:rgba(255,255,255,.3);box-shadow:inset 0 0 0 1.5px
         <thead><tr><th>Agent</th><th>Expéditeur</th><th>Action</th><th>Heure</th><th>État</th><th></th></tr></thead>
         <tbody id="schedules-tbody"></tbody>
       </table>
+    </div>
+  </div>
+
+  <div id="tab-export" class="admin-section">
+    <div class="admin-card">
+      <h3>📄 Export PDF des transactions</h3>
+      <p style="font-size:.83rem;color:#888;margin-bottom:14px">Choisis un ou plusieurs expéditeurs et une plage de dates. Le PDF contiendra, pour chaque transaction : <strong>date, expéditeur, numéro, montant et référence</strong> (extraits du message).</p>
+      <div style="margin-bottom:6px;font-size:.75rem;color:#888">Expéditeurs</div>
+      <div id="export-senders" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px"></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px">
+        <div><label style="font-size:.72rem;color:#888;display:block;margin-bottom:2px">Du</label><input type="date" id="export-from" style="padding:6px;border:1px solid #ddd;border-radius:6px"></div>
+        <div><label style="font-size:.72rem;color:#888;display:block;margin-bottom:2px">Au</label><input type="date" id="export-to" style="padding:6px;border:1px solid #ddd;border-radius:6px"></div>
+        <button class="btn-primary btn-sm" onclick="exportPdf()">📄 Générer le PDF</button>
+      </div>
+      <div id="export-status" style="font-size:.85rem;color:#666"></div>
     </div>
   </div>
 
@@ -395,6 +411,7 @@ function switchAdminTab(tab) {
   if (tab === 'senders') loadAdminSenders();
   if (tab === 'users') typeof adminLoadUsers === 'function' && adminLoadUsers();
   if (tab === 'schedules') loadSchedules();
+  if (tab === 'export') loadExportSenders();
 }
 function showDashboard() {
   requestNotifPermission();
@@ -826,6 +843,44 @@ async function deleteSchedule(id) {
   if(!confirm('Supprimer cette programmation ?')) return;
   try { await api('DELETE','/api/admin/schedules/'+id); showToast('Programmation supprimée'); loadSchedules(); }
   catch(e){ showToast('Erreur: '+e.message, false); }
+}
+
+// ── Export PDF ───────────────────────────────────────────────────────────────
+async function loadExportSenders() {
+  try {
+    const senders = await api('GET','/api/admin/senders');
+    const box = document.getElementById('export-senders');
+    box.innerHTML = (senders&&senders.length)
+      ? senders.map(d=>`<label style="display:flex;align-items:center;gap:5px;font-size:.85rem;border:1px solid #ddd;border-radius:6px;padding:5px 9px;cursor:pointer"><input type="checkbox" class="exp-sender" value="${escHtml(d.sender)}">${escHtml(d.sender)}</label>`).join('')
+      : '<em style="color:#aaa">Aucun expéditeur</em>';
+    const today = new Date().toISOString().slice(0,10);
+    const f = document.getElementById('export-from'), t = document.getElementById('export-to');
+    if(!f.value) f.value = today;
+    if(!t.value) t.value = today;
+  } catch(e){ showToast('Erreur: '+e.message, false); }
+}
+async function exportPdf() {
+  const senders = [...document.querySelectorAll('.exp-sender:checked')].map(c=>c.value);
+  const from = document.getElementById('export-from').value;
+  const to   = document.getElementById('export-to').value;
+  const status = document.getElementById('export-status');
+  if(!senders.length){ showToast('Sélectionne au moins un expéditeur', false); return; }
+  status.textContent = 'Génération du PDF en cours…';
+  try {
+    const r = await fetch('/api/export/pdf', {
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
+      body: JSON.stringify({ senders, from, to })
+    });
+    if(!r.ok){ const e = await r.json().catch(()=>({})); throw new Error(e.error || ('HTTP '+r.status)); }
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `export_${from}_${to}.pdf`;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+    status.textContent = '✓ PDF téléchargé';
+  } catch(e){ status.textContent = ''; showToast('Erreur: '+e.message, false); }
 }
 
 // ── Admin – Utilisateurs ──────────────────────────────────────────────────────
