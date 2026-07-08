@@ -268,7 +268,8 @@ header .hbtn.active{background:rgba(255,255,255,.3);box-shadow:inset 0 0 0 1.5px
           <button class="btn-sm" onclick="document.getElementById('sch-time').value='14:00'">14h</button>
           <button class="btn-sm" onclick="document.getElementById('sch-time').value='22:00'">22h</button>
         </div>
-        <button class="btn-primary btn-sm" onclick="addSchedule()">+ Programmer</button>
+        <button class="btn-primary btn-sm" id="sch-save-btn" onclick="addSchedule()">+ Programmer</button>
+        <button class="btn-sm" id="sch-cancel-btn" style="display:none;background:#777;color:#fff" onclick="cancelEditSchedule()">Annuler</button>
       </div>
       <table class="admin-table" id="schedules-table">
         <thead><tr><th>Agent</th><th>Expéditeur</th><th>Action</th><th>Heure</th><th>État</th><th></th></tr></thead>
@@ -805,10 +806,12 @@ async function loadScheduleOptions() {
   const sSel = document.getElementById('sch-sender');
   sSel.innerHTML = (senders&&senders.length) ? senders.map(d=>`<option value="${escHtml(d.sender)}">${escHtml(d.sender)}</option>`).join('') : '<option value="">(aucun)</option>';
 }
+let editingScheduleId = null;
 async function loadSchedules() {
   try {
     await loadScheduleOptions();
     const rows = await api('GET','/api/admin/schedules');
+    window._schedules = rows;
     const tb = document.getElementById('schedules-tbody');
     if(!rows.length){ tb.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#aaa;padding:20px">Aucune programmation</td></tr>'; return; }
     tb.innerHTML = rows.map(s => {
@@ -820,20 +823,47 @@ async function loadSchedules() {
         <td>${act}</td>
         <td>${hh}:${mm}</td>
         <td><button class="btn-sm ${s.active?'btn-success':'btn-danger'}" onclick="toggleSchedule(${s.id},${s.active?0:1})">${s.active?'Actif':'En pause'}</button></td>
-        <td><button class="btn-danger btn-sm" onclick="deleteSchedule(${s.id})">✕</button></td>
+        <td style="white-space:nowrap">
+          <button class="btn-primary btn-sm" onclick="editSchedule(${s.id})">✏ Modifier</button>
+          <button class="btn-danger btn-sm" onclick="deleteSchedule(${s.id})">✕</button>
+        </td>
       </tr>`;
     }).join('');
   } catch(e){ showToast('Erreur: '+e.message, false); }
+}
+function editSchedule(id) {
+  const s = (window._schedules||[]).find(x => x.id === id);
+  if(!s) return;
+  editingScheduleId = id;
+  document.getElementById('sch-user').value   = s.user_id;
+  document.getElementById('sch-sender').value = s.sender;
+  document.getElementById('sch-action').value = s.action;
+  document.getElementById('sch-time').value   = String(s.hour).padStart(2,'0')+':'+String(s.minute||0).padStart(2,'0');
+  document.getElementById('sch-save-btn').textContent = '✓ Enregistrer';
+  document.getElementById('sch-cancel-btn').style.display = '';
+  document.querySelector('#tab-schedules .admin-card').scrollIntoView({behavior:'smooth', block:'start'});
+}
+function cancelEditSchedule() {
+  editingScheduleId = null;
+  document.getElementById('sch-save-btn').textContent = '+ Programmer';
+  document.getElementById('sch-cancel-btn').style.display = 'none';
 }
 async function addSchedule() {
   const user_id = document.getElementById('sch-user').value;
   const sender  = document.getElementById('sch-sender').value;
   const action  = document.getElementById('sch-action').value;
   const parts = (document.getElementById('sch-time').value||'06:00').split(':');
+  const hour = parseInt(parts[0]), minute = parseInt(parts[1])||0;
   if(!user_id || !sender){ showToast('Choisis un agent et un expéditeur', false); return; }
   try {
-    await api('POST','/api/admin/schedules',{ user_id, sender, action, hour: parseInt(parts[0]), minute: parseInt(parts[1])||0 });
-    showToast('Programmation ajoutée');
+    if (editingScheduleId) {
+      await api('PUT','/api/admin/schedules/'+editingScheduleId,{ user_id, sender, action, hour, minute });
+      showToast('Programmation modifiée');
+      cancelEditSchedule();
+    } else {
+      await api('POST','/api/admin/schedules',{ user_id, sender, action, hour, minute });
+      showToast('Programmation ajoutée');
+    }
     loadSchedules();
   } catch(e){ showToast('Erreur: '+e.message, false); }
 }

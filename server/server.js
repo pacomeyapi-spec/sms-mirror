@@ -878,11 +878,31 @@ app.post('/api/admin/schedules', requireDashboardAuth, requireAdmin, async (req,
 });
 
 app.put('/api/admin/schedules/:id', requireDashboardAuth, requireAdmin, async (req, res) => {
-  const { active } = req.body;
-  db.prepare("UPDATE sender_schedules SET active=? WHERE id=?").run(active ? 1 : 0, req.params.id);
+  const cur = db.prepare("SELECT * FROM sender_schedules WHERE id=?").get(req.params.id);
+  if (!cur) return res.status(404).json({ error: 'Programmation introuvable' });
+  const b = req.body || {};
+  const sets = [], params = { id: req.params.id };
+  if (b.user_id !== undefined) { sets.push('user_id=@user_id'); params.user_id = parseInt(b.user_id); }
+  if (b.sender  !== undefined) { sets.push('sender=@sender');   params.sender  = b.sender; }
+  if (b.action  !== undefined) { if(!['enable','disable'].includes(b.action)) return res.status(400).json({error:'Action invalide'}); sets.push('action=@action'); params.action = b.action; }
+  if (b.hour    !== undefined) { const h=parseInt(b.hour); if(isNaN(h)||h<0||h>23) return res.status(400).json({error:'Heure invalide'}); sets.push('hour=@hour'); params.hour = h; }
+  if (b.minute  !== undefined) { const m=parseInt(b.minute)||0; if(m<0||m>59) return res.status(400).json({error:'Minute invalide'}); sets.push('minute=@minute'); params.minute = m; }
+  if (b.active  !== undefined) { sets.push('active=@active'); params.active = b.active ? 1 : 0; }
+  // Si on change le ciblage (heure/agent/expéditeur/action), on réarme : re-déclenche au prochain créneau,
+  // sans application immédiate surprise si l'heure est déjà passée aujourd'hui.
+  const timingChanged = ['hour','minute','user_id','sender','action'].some(k => b[k] !== undefined);
+  if (timingChanged) {
+    const newHour = b.hour   !== undefined ? parseInt(b.hour)        : cur.hour;
+    const newMin  = b.minute !== undefined ? (parseInt(b.minute)||0) : (cur.minute||0);
+    const now = new Date();
+    const passed = (now.getUTCHours()*60 + now.getUTCMinutes()) >= (newHour*60 + newMin);
+    sets.push('last_run=@last_run');
+    params.last_run = passed ? now.toISOString().slice(0,10) : null;
+  }
+  if (sets.length) db.prepare(`UPDATE sender_schedules SET ${sets.join(',')} WHERE id=@id`).run(params);
   const row = db.prepare("SELECT * FROM sender_schedules WHERE id=?").get(req.params.id);
-  if (row) await fsSet('sender_schedules', String(row.id), row);
-  res.json({ ok: true });
+  await fsSet('sender_schedules', String(row.id), row);
+  res.json({ ok: true, schedule: row });
 });
 
 app.delete('/api/admin/schedules/:id', requireDashboardAuth, requireAdmin, async (req, res) => {
