@@ -271,6 +271,7 @@ header .hbtn.active{background:rgba(255,255,255,.3);box-shadow:inset 0 0 0 1.5px
         <button class="btn-primary btn-sm" id="sch-save-btn" onclick="addSchedule()">+ Programmer</button>
         <button class="btn-sm" id="sch-cancel-btn" style="display:none;background:#777;color:#fff" onclick="cancelEditSchedule()">Annuler</button>
       </div>
+      <input type="text" id="sch-search" oninput="filterSchedules()" placeholder="🔍 Rechercher (agent, expéditeur, action, heure…)" style="width:100%;max-width:440px;padding:8px 11px;border:1px solid #ddd;border-radius:6px;margin-bottom:12px">
       <table class="admin-table" id="schedules-table">
         <thead><tr><th>Agent</th><th>Expéditeur</th><th>Action</th><th>Heure</th><th>État</th><th></th></tr></thead>
         <tbody id="schedules-tbody"></tbody>
@@ -810,26 +811,41 @@ let editingScheduleId = null;
 async function loadSchedules() {
   try {
     await loadScheduleOptions();
-    const rows = await api('GET','/api/admin/schedules');
-    window._schedules = rows;
-    const tb = document.getElementById('schedules-tbody');
-    if(!rows.length){ tb.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#aaa;padding:20px">Aucune programmation</td></tr>'; return; }
-    tb.innerHTML = rows.map(s => {
-      const hh = String(s.hour).padStart(2,'0'), mm = String(s.minute||0).padStart(2,'0');
-      const act = s.action==='enable' ? '<span style="color:#2e7d32">✓ Activer</span>' : '<span style="color:#c62828">✗ Désactiver</span>';
-      return `<tr>
-        <td><strong>${escHtml(s.username||('#'+s.user_id))}</strong></td>
-        <td>${escHtml(s.sender)}</td>
-        <td>${act}</td>
-        <td>${hh}:${mm}</td>
-        <td><button class="btn-sm ${s.active?'btn-success':'btn-danger'}" onclick="toggleSchedule(${s.id},${s.active?0:1})">${s.active?'Actif':'En pause'}</button></td>
-        <td style="white-space:nowrap">
-          <button class="btn-primary btn-sm" onclick="editSchedule(${s.id})">✏ Modifier</button>
-          <button class="btn-danger btn-sm" onclick="deleteSchedule(${s.id})">✕</button>
-        </td>
-      </tr>`;
-    }).join('');
+    window._schedules = await api('GET','/api/admin/schedules');
+    const sb = document.getElementById('sch-search'); if(sb) sb.value = '';
+    renderSchedules(window._schedules);
   } catch(e){ showToast('Erreur: '+e.message, false); }
+}
+function renderSchedules(rows) {
+  const tb = document.getElementById('schedules-tbody');
+  if(!rows.length){ tb.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#aaa;padding:20px">Aucune programmation</td></tr>'; return; }
+  tb.innerHTML = rows.map(s => {
+    const hh = String(s.hour).padStart(2,'0'), mm = String(s.minute||0).padStart(2,'0');
+    const act = s.action==='enable' ? '<span style="color:#2e7d32">✓ Activer</span>' : '<span style="color:#c62828">✗ Désactiver</span>';
+    return `<tr>
+      <td><strong>${escHtml(s.username||('#'+s.user_id))}</strong></td>
+      <td>${escHtml(s.sender)}</td>
+      <td>${act}</td>
+      <td>${hh}:${mm}</td>
+      <td><button class="btn-sm ${s.active?'btn-success':'btn-danger'}" onclick="toggleSchedule(${s.id},${s.active?0:1})">${s.active?'Actif':'En pause'}</button></td>
+      <td style="white-space:nowrap">
+        <button class="btn-primary btn-sm" onclick="editSchedule(${s.id})">✏ Modifier</button>
+        <button class="btn-danger btn-sm" onclick="deleteSchedule(${s.id})">✕</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+function filterSchedules() {
+  const q = (document.getElementById('sch-search').value||'').toLowerCase().trim();
+  const all = window._schedules || [];
+  if(!q){ renderSchedules(all); return; }
+  const filtered = all.filter(s => {
+    const hh = String(s.hour).padStart(2,'0')+':'+String(s.minute||0).padStart(2,'0');
+    const actionTxt = s.action==='enable' ? 'activer cocher' : 'desactiver decocher';
+    const hay = [s.username||'', s.sender||'', actionTxt, hh, String(s.hour)].join(' ').toLowerCase();
+    return hay.includes(q);
+  });
+  renderSchedules(filtered);
 }
 function editSchedule(id) {
   const s = (window._schedules||[]).find(x => x.id === id);
