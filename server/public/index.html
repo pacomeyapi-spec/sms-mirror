@@ -812,8 +812,10 @@ async function loadSchedules() {
   try {
     await loadScheduleOptions();
     window._schedules = await api('GET','/api/admin/schedules');
-    const sb = document.getElementById('sch-search'); if(sb) sb.value = '';
-    renderSchedules(window._schedules);
+    // Ne PAS vider la recherche : on réapplique le filtre courant (l'utilisateur seul l'efface).
+    const sb = document.getElementById('sch-search');
+    if (sb && sb.value.trim()) filterSchedules();
+    else renderSchedules(window._schedules);
   } catch(e){ showToast('Erreur: '+e.message, false); }
 }
 function renderSchedules(rows) {
