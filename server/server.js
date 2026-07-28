@@ -132,6 +132,28 @@ function correctWavePersoAmount(content) {
   return content.slice(0, m.index) + m[1] + origine + m[3] + content.slice(m.index + m[0].length);
 }
 
+/**
+ * Certaines notifications Wave arrivent en ANGLAIS
+ * ("Transfer received! You received 45F From ... New balance: ... With ...").
+ * On les traduit en français à la réception pour qu'elles soient reconnues comme
+ * « Transfert reçu » (basculées vers Wave Business, montant corrigé) et affichées
+ * exactement comme les notifications françaises dans YapsonPress.
+ */
+function translateWaveContent(content, msg) {
+  if (!content) return content;
+  const isWave = /wave/i.test(msg.app_name || msg.sender_name || msg.sender || '') ||
+                 (msg.app_package || '').toLowerCase() === 'com.wave.personal';
+  if (!isWave) return content;
+  if (!/transfer\s+received|you\s+received/i.test(content)) return content;   // uniquement l'anglais
+  return content
+    .replace(/Transfer\s+received/gi, 'Transfert reçu')
+    .replace(/You\s+received/gi,      'Vous avez reçu')
+    .replace(/\bNew\s+balance\b/gi,   'Nouveau solde')
+    .replace(/\bFrom\b/gi,            'De')
+    .replace(/\bWith\b/gi,            'Avec')
+    .replace(/\bat\b/gi,              'à');
+}
+
 // ── Base de données SQLite (cache de travail) ────────────────────────────────
 const _dbPath = process.env.DB_PATH || 'sms_mirror.db';
 const _dbDir = require('path').dirname(_dbPath);
@@ -431,6 +453,8 @@ app.post('/api/messages', requireDeviceAuth, async (req, res) => {
 
   db.transaction((msgs) => {
     for (const msg of msgs) {
+      // Traduire les notifications Wave en anglais → français (avant tout le reste)
+      if (msg.content) msg.content = translateWaveContent(msg.content, msg);
       const verdict = classify(msg);
       if (!verdict.keep) { dropped++; pushDropped(msg); continue; }   // ← expéditeur non autorisé : ignoré
       // Wave perso « Transfert reçu » (override = Wave Business) → corriger le montant (reçu ÷ 0,99)
@@ -948,7 +972,8 @@ function parseReference(content) {
     /\b(PP\d{6}\.\d+\.[A-Za-z0-9]+)\b/,                                                     // Orange PP...
     /(?:r[ée]f[ée]rence|r[ée]f|transaction\s*id|txn|financial\s*transaction\s*id|id\s*(?:de\s*)?(?:la\s*)?transaction)\s*[:#=]?\s*([A-Za-z0-9][A-Za-z0-9._\/-]{4,})/i,
     /\bID\s*[:#=]\s*([A-Za-z0-9][A-Za-z0-9._\/-]{4,})/i,
-    /\b[A-Z0-9]{2,}\.[A-Z0-9.]{4,}\b/                                                        // token type XX.YYYY.ZZZ
+    /\b[A-Z0-9]{2,}\.[A-Z0-9.]{4,}\b/,                                                       // token type XX.YYYY.ZZZ
+    /\b(?=[A-Z0-9]*[A-Z])(?=[A-Z0-9]*\d)[A-Z0-9]{10,}\b/                                     // code Wave (ex. T42WR5RRNVTMW7CMR)
   ];
   for (const p of pats) { const m = c.match(p); if (m) return (m[1] || m[0]).trim(); }
   return null;
