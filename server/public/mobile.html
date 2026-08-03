@@ -290,6 +290,18 @@ async function loadMessages(reset){
   loading=false;
 }
 
+/* Le recalcul des expéditeurs (GROUP BY sur toute la table) est coûteux :
+   on le limite à une fois toutes les 25 s max, même en cas de rafale de messages. */
+let sendersTimer = null, sendersLast = 0;
+const SENDERS_MIN_MS = 25000;
+function refreshSendersThrottled(){
+  const now = Date.now(), waited = now - sendersLast;
+  if(waited >= SENDERS_MIN_MS){ sendersLast = now; loadSenders(); return; }
+  if(!sendersTimer){
+    sendersTimer = setTimeout(()=>{ sendersTimer=null; sendersLast=Date.now(); loadSenders(); }, SENDERS_MIN_MS - waited);
+  }
+}
+
 /* ── Temps réel (socket.io) ── */
 function connectSocket(){
   if(!token || typeof io === 'undefined') return;
@@ -326,7 +338,7 @@ function connectSocket(){
       });
     }
     // Rafraîchir les compteurs des pastilles + prévenir si le message n'est pas dans la vue
-    loadSenders();
+    refreshSendersThrottled();
     const first = visible[0];
     const snd = first.sender_name||first.sender||first.app_name||'Inconnu';
     if(!match.length) toast(visible.length===1 ? `Nouveau message — ${snd}` : `${visible.length} nouveaux messages`);
