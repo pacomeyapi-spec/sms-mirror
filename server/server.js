@@ -357,6 +357,7 @@ app.use(cors());
 app.use(express.json({ limit: '25mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 app.get('/admin', (req, res) => res.sendFile('index.html', { root: path.join(__dirname, 'public') }));
+app.get('/m', (req, res) => res.sendFile('mobile.html', { root: path.join(__dirname, 'public') }));
 
 // ── Middlewares Auth ─────────────────────────────────────────────────────────
 function requireDashboardAuth(req, res, next) {
