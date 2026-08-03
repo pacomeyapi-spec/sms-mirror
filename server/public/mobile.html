@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#0f172a">
 <title>YapsonPress</title>
+<script src="/socket.io/socket.io.js"></script>
 <style>
   :root{
     --bg:#0f172a; --bg2:#111c34; --card:#ffffff; --ink:#0f172a; --muted:#64748b;
@@ -82,6 +83,8 @@
     color:var(--brand);font-weight:700;font-size:14px;cursor:pointer;margin-top:6px}
 
   /* ── Actions de statut (Approuvé / Pas de commande) ── */
+  .msg.fresh{animation:pop .45s ease;border-color:var(--brand);box-shadow:0 0 0 3px rgba(37,99,235,.16)}
+  @keyframes pop{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
   .msg.is-approuve{border-color:#bbf7d0;background:#f0fdf4}
   .msg.is-pas_de_commande{border-color:#fecaca;background:#fef2f2}
   .acts{display:flex;gap:8px;margin-top:11px}
@@ -179,6 +182,7 @@ let role  = localStorage.getItem('yp_role')  || '';
 let uname = localStorage.getItem('yp_user')  || '';
 let currentSender = null;   // null = tous
 let offset = 0, PAGE = 60, loading = false, searchTimer = null;
+let socket = null, allSenders = [];
 
 function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),1900); }
 
@@ -209,6 +213,7 @@ async function doLogin(){
 }
 
 function logout(){
+  try{ if(socket){ socket.disconnect(); socket=null; } }catch(e){}
   token=''; localStorage.removeItem('yp_token'); localStorage.removeItem('yp_role'); localStorage.removeItem('yp_user');
   document.getElementById('app').classList.add('hidden');
   document.getElementById('login').classList.remove('hidden');
@@ -220,6 +225,7 @@ function showApp(){
   document.getElementById('app').classList.remove('hidden');
   loadSenders();
   reload();
+  connectSocket();
 }
 
 function fmtTime(ts){
@@ -238,6 +244,7 @@ function highlight(s){
 async function loadSenders(){
   try{
     const rows = await api('/api/senders');
+    allSenders = rows;
     const chips = document.getElementById('chips');
     let html = `<div class="chip ${currentSender===null?'on':''}" onclick="pickSender(null)">Tous</div>`;
     html += rows.map(r=>{
@@ -282,6 +289,66 @@ async function loadMessages(reset){
   }catch(e){ toast(e.message); }
   loading=false;
 }
+
+/* ── Temps réel (socket.io) ── */
+function connectSocket(){
+  if(!token || typeof io === 'undefined') return;
+  try{ if(socket) socket.disconnect(); }catch(e){}
+  socket = io({ auth: { token }, transports:['websocket','polling'] });
+
+  socket.on('new_messages', (msgs)=>{
+    if(!msgs || !msgs.length) return;
+    // Le serveur filtre déjà par appareil autorisé ; on filtre aussi par expéditeur visible
+    const allowed = new Set(allSenders.map(s=>s.display_name));
+    const visible = (role==='admin') ? msgs : msgs.filter(m=>allowed.has(m.sender_name||m.sender||m.app_name||'Inconnu'));
+    if(!visible.length) return;
+
+    // Ne garder que ceux qui correspondent au filtre et à la recherche en cours
+    const q = (document.getElementById('q').value||'').trim().toLowerCase();
+    const match = visible.filter(m=>{
+      const snd = m.sender_name||m.sender||m.app_name||'Inconnu';
+      if(currentSender && snd !== currentSender) return false;
+      if(q && !((m.content||'').toLowerCase().includes(q) || snd.toLowerCase().includes(q))) return false;
+      return true;
+    });
+
+    const feed = document.getElementById('feed');
+    if(match.length){
+      // Les plus récents en premier, insérés en haut du fil
+      const html = match.slice().sort((a,b)=>(b.timestamp||0)-(a.timestamp||0)).map(m=>msgCard(m)).join('');
+      const vide = feed.querySelector('.empty');
+      if(vide) feed.innerHTML = '';
+      feed.insertAdjacentHTML('afterbegin', html);
+      offset += match.length;                     // garde « Charger plus » cohérent
+      match.forEach(m=>{
+        const c = document.getElementById('m-'+String(m.id));
+        if(c){ c.classList.add('fresh'); setTimeout(()=>c.classList.remove('fresh'), 2200); }
+      });
+    }
+    // Rafraîchir les compteurs des pastilles + prévenir si le message n'est pas dans la vue
+    loadSenders();
+    const first = visible[0];
+    const snd = first.sender_name||first.sender||first.app_name||'Inconnu';
+    if(!match.length) toast(visible.length===1 ? `Nouveau message — ${snd}` : `${visible.length} nouveaux messages`);
+    vibrate();
+  });
+
+  socket.on('message_status_updated', ({id, status})=>{
+    const card = document.getElementById('m-'+String(id));
+    if(!card) return;
+    card.classList.remove('is-approuve','is-pas_de_commande');
+    if(status) card.classList.add('is-'+status);
+    const acts = card.querySelectorAll('.act');
+    acts.forEach(a=>a.classList.remove('on'));
+    if(status==='approuve') card.querySelector('.act.ok')?.classList.add('on');
+    if(status==='pas_de_commande') card.querySelector('.act.no')?.classList.add('on');
+  });
+
+  // Après une coupure réseau, on resynchronise le fil
+  socket.on('connect', ()=>{ if(socket._wasOff){ socket._wasOff=false; loadSenders(); reload(); } });
+  socket.on('disconnect', ()=>{ socket._wasOff = true; });
+}
+function vibrate(){ try{ if(navigator.vibrate) navigator.vibrate(35); }catch(e){} }
 
 /* ── Carte message + statut (Approuvé / Pas de commande) ── */
 function msgCard(m){
