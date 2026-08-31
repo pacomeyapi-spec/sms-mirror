@@ -52,6 +52,9 @@
     display:flex;align-items:center;gap:12px;box-shadow:0 4px 16px rgba(2,6,23,.25)}
   header .brand{font-weight:800;font-size:18px;letter-spacing:.3px;flex:1;display:flex;align-items:center;gap:9px}
   header .brand .dot{width:26px;height:26px;border-radius:8px;background:rgba(255,255,255,.16);display:grid;place-items:center;font-size:15px}
+  header .acct{font-size:11px;font-weight:700;background:rgba(255,255,255,.22);padding:4px 9px;border-radius:999px;
+    letter-spacing:0;max-width:38vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}
+  header .acct:empty{display:none}
   .iconbtn{width:40px;height:40px;border-radius:12px;border:0;background:rgba(255,255,255,.14);color:#fff;
     font-size:18px;cursor:pointer;display:grid;place-items:center}
   .iconbtn:active{background:rgba(255,255,255,.28)}
@@ -153,6 +156,7 @@
       <input id="l-pass" type="password" autocomplete="current-password" placeholder="••••••••">
     </div>
     <button class="btn" onclick="doLogin()">Se connecter</button>
+    <button class="btn ghost" id="l-back" style="display:none;margin-top:8px" onclick="cancelAddAccount()">Retour</button>
     <div class="err" id="l-err"></div>
   </div>
 </div>
@@ -160,7 +164,7 @@
 <!-- APP -->
 <div id="app" class="hidden">
   <header>
-    <div class="brand"><span class="dot">📡</span> YapsonPress</div>
+    <div class="brand"><span class="dot">📡</span> YapsonPress <span id="acct-badge" class="acct" onclick="openMenu()"></span></div>
     <button class="iconbtn" onclick="refresh()" title="Rafraîchir">⟳</button>
     <button class="iconbtn" onclick="openMenu()" title="Menu">☰</button>
   </header>
@@ -180,6 +184,33 @@ const API = ''; // même origine que la page (servie par le serveur YapsonPress)
 let token = localStorage.getItem('yp_token') || '';
 let role  = localStorage.getItem('yp_role')  || '';
 let uname = localStorage.getItem('yp_user')  || '';
+
+/* ── Comptes multiples ──────────────────────────────────────────────────────
+   Plusieurs comptes YapsonPress peuvent être enregistrés et basculés sans
+   se reconnecter. Chaque compte garde son propre jeton (et donc ses propres
+   expéditeurs et appareils autorisés). */
+function loadAccounts(){
+  try{ const a = JSON.parse(localStorage.getItem('yp_accounts')||'[]'); return Array.isArray(a)?a:[]; }
+  catch(e){ return []; }
+}
+function saveAccounts(list){ localStorage.setItem('yp_accounts', JSON.stringify(list)); }
+/* Reprise de l'ancien format (un seul compte) → aucune reconnexion nécessaire */
+(function migrateAccounts(){
+  const list = loadAccounts();
+  if(!list.length && token && uname){ saveAccounts([{u:uname, r:role, t:token}]); }
+})();
+function upsertAccount(u, r, t){
+  const list = loadAccounts();
+  const i = list.findIndex(a=>a.u===u);
+  if(i>=0) list[i] = {u, r, t}; else list.push({u, r, t});
+  saveAccounts(list);
+}
+function setActiveAccount(acc){
+  token = acc.t; role = acc.r; uname = acc.u;
+  localStorage.setItem('yp_token',token);
+  localStorage.setItem('yp_role',role);
+  localStorage.setItem('yp_user',uname);
+}
 let currentSender = null;   // null = tous
 let offset = 0, PAGE = 60, loading = false, searchTimer = null;
 let socket = null, allSenders = [];
@@ -206,23 +237,86 @@ async function doLogin(){
     const r = await fetch(API+'/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password})});
     const d = await r.json();
     if(!r.ok) throw new Error(d.error||'Identifiants incorrects');
-    token=d.token; role=d.role; uname=d.username;
-    localStorage.setItem('yp_token',token); localStorage.setItem('yp_role',role); localStorage.setItem('yp_user',uname);
+    upsertAccount(d.username, d.role, d.token);
+    setActiveAccount({u:d.username, r:d.role, t:d.token});
+    document.getElementById('l-pass').value = '';
+    document.getElementById('l-user').value = '';
     showApp();
   }catch(e){ err.textContent = e.message; }
 }
 
-function logout(){
+/* Bascule vers un autre compte enregistré — aucune ressaisie de mot de passe */
+function switchAccount(i){
+  const acc = loadAccounts()[i];
+  if(!acc) return;
+  if(acc.u === uname){ closeSheet(); return; }
   try{ if(socket){ socket.disconnect(); socket=null; } }catch(e){}
-  token=''; localStorage.removeItem('yp_token'); localStorage.removeItem('yp_role'); localStorage.removeItem('yp_user');
+  setActiveAccount(acc);
+  currentSender = null; allSenders = []; offset = 0;
+  const q = document.getElementById('q'); if(q) q.value = '';
+  closeSheet();
+  showApp();
+  toast('Compte : '+acc.u);
+}
+
+/* Ajouter un compte : on affiche l'écran de connexion sans toucher aux comptes existants */
+function addAccount(){
+  closeSheet();
+  try{ if(socket){ socket.disconnect(); socket=null; } }catch(e){}
   document.getElementById('app').classList.add('hidden');
   document.getElementById('login').classList.remove('hidden');
+  document.getElementById('l-err').textContent = '';
+  updateLoginBack();
+}
+
+function removeAccount(i){
+  const list = loadAccounts();
+  const acc = list[i];
+  if(!acc) return;
+  if(!confirm('Retirer le compte « '+acc.u+' » de cette application ?')) return;
+  const rest = list.filter((_,j)=>j!==i);
+  saveAccounts(rest);
+  if(acc.u === uname){
+    if(rest.length){ switchAccount(0); }
+    else{ logout(); }
+  } else { openMenu(); toast('Compte retiré'); }
+}
+
+/* Revenir à l'application depuis l'écran « ajouter un compte » */
+function cancelAddAccount(){
+  if(!token) return;
+  document.getElementById('login').classList.add('hidden');
+  document.getElementById('app').classList.remove('hidden');
+  connectSocket();
+}
+function updateLoginBack(){
+  const b = document.getElementById('l-back');
+  if(b) b.style.display = (token && loadAccounts().length) ? '' : 'none';
+}
+
+function logout(){
+  try{ if(socket){ socket.disconnect(); socket=null; } }catch(e){}
+  const rest = loadAccounts().filter(a=>a.u!==uname);
+  saveAccounts(rest);
+  token=''; localStorage.removeItem('yp_token'); localStorage.removeItem('yp_role'); localStorage.removeItem('yp_user');
   closeSheet();
+  if(rest.length){                       // il reste des comptes → on bascule au lieu de tout perdre
+    setActiveAccount(rest[0]);
+    currentSender = null; allSenders = []; offset = 0;
+    showApp();
+    toast('Compte : '+rest[0].u);
+    return;
+  }
+  document.getElementById('app').classList.add('hidden');
+  document.getElementById('login').classList.remove('hidden');
+  updateLoginBack();
 }
 
 function showApp(){
   document.getElementById('login').classList.add('hidden');
   document.getElementById('app').classList.remove('hidden');
+  const b = document.getElementById('acct-badge');
+  if(b) b.textContent = loadAccounts().length > 1 ? uname : '';
   loadSenders();
   reload();
   connectSocket();
@@ -412,19 +506,32 @@ function openSheet(html){ document.getElementById('sheet').innerHTML=html; docum
 function closeSheet(){ document.getElementById('sheet-bg').classList.remove('show'); }
 
 function openMenu(){
+  const list = loadAccounts();
+  const comptes = list.map((a,i)=>{
+    const actif = a.u === uname;
+    return `<div class="menu-item" style="${actif?'background:#eff6ff':''}" onclick="switchAccount(${i})">
+      <span class="ic">${actif?'✅':'👤'}</span>
+      <div style="flex:1"><div>${esc(a.u)}${actif?' <span style="font-size:11px;color:var(--brand)">(actif)</span>':''}</div>
+      <div style="font-size:12px;color:var(--muted)">${esc(a.r||'')}</div></div>
+      <span onclick="event.stopPropagation();removeAccount(${i})" style="padding:4px 8px;color:var(--danger);font-size:16px">✕</span>
+    </div>`;
+  }).join('');
   openSheet(`
     <h3>Menu</h3>
     <div class="sub">Connecté : <b>${esc(uname)}</b> (${esc(role)})</div>
-    <div class="menu-item" onclick="showToken()"><span class="ic">🔑</span><div><div>Token super-bot</div><div style="font-size:12px;color:var(--muted)">Copier le jeton pour le bot</div></div></div>
+    ${list.length>1?'<div class="sub" style="margin-top:10px">Mes comptes — touche pour basculer</div>':'<div class="sub" style="margin-top:10px">Mes comptes</div>'}
+    ${comptes}
+    <div class="menu-item" onclick="addAccount()"><span class="ic">➕</span><div><div>Ajouter un compte</div><div style="font-size:12px;color:var(--muted)">Se connecter à un autre compte</div></div></div>
+    <div class="menu-item" onclick="showToken()"><span class="ic">🔑</span><div><div>Token super-bot</div><div style="font-size:12px;color:var(--muted)">Jeton du compte ${esc(uname)}</div></div></div>
     <div class="menu-item" onclick="refresh();closeSheet()"><span class="ic">⟳</span>Rafraîchir</div>
-    <div class="menu-item danger" onclick="logout()"><span class="ic">⎋</span>Se déconnecter</div>
+    <div class="menu-item danger" onclick="logout()"><span class="ic">⎋</span>Se déconnecter${list.length>1?' de ce compte':''}</div>
   `);
 }
 
 function showToken(){
   openSheet(`
     <h3>🔑 Token super-bot</h3>
-    <div class="sub">Colle ce jeton dans la configuration du super-bot (champ « YapsonPress token »). Valable 30 jours.</div>
+    <div class="sub">Jeton du compte <b>${esc(uname)}</b>. Colle-le dans la configuration du super-bot (champ « YapsonPress token »). Valable 30 jours.</div>
     <div class="tokenbox" id="tokbox">${esc(token)}</div>
     <div class="row">
       <button class="btn small" onclick="copyToken()">📋 Copier</button>
@@ -446,6 +553,7 @@ async function copyToken(){
 
 /* démarrage */
 if(token){ showApp(); }
+updateLoginBack();
 document.getElementById('l-pass').addEventListener('keydown',e=>{ if(e.key==='Enter') doLogin(); });
 </script>
 </body>
