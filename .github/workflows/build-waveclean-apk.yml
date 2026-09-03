@@ -1,0 +1,59 @@
+name: Build WaveClean APK
+
+on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'yapson-notifclean/**'
+      - '.github/workflows/build-waveclean-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    name: Build APK WaveClean
+
+    steps:
+      - name: Checkout du code
+        uses: actions/checkout@v4
+
+      - name: Configuration JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Configuration Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Installation de Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.7'
+
+      - name: Compilation APK Debug
+        working-directory: yapson-notifclean
+        run: gradle assembleDebug --stacktrace --no-daemon
+
+      - name: Téléchargement APK Debug (artefact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: WaveClean-debug
+          path: yapson-notifclean/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 90
+
+      - name: Préparer l'APK pour la Release
+        run: cp yapson-notifclean/app/build/outputs/apk/debug/app-debug.apk WaveClean.apk
+
+      - name: Publier la Release (lien direct APK)
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: waveclean-latest
+          name: Wave Clean — dernier APK
+          body: "Utilitaire qui efface les notifications Wave restées affichées (balayage périodique, avec délai de sécurité pour ne pas devancer la capture SMS Mirror)."
+          files: WaveClean.apk
