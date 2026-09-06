@@ -116,7 +116,9 @@
   .sheet-bg{position:fixed;inset:0;background:rgba(2,6,23,.55);z-index:40;display:none;align-items:flex-end}
   .sheet-bg.show{display:flex}
   .sheet{width:100%;max-width:560px;margin:0 auto;background:#fff;border-radius:22px 22px 0 0;padding:20px 18px calc(env(safe-area-inset-bottom) + 22px);
-    box-shadow:0 -10px 40px rgba(2,6,23,.3);animation:up .22s ease}
+    box-shadow:0 -10px 40px rgba(2,6,23,.3);animation:up .22s ease;
+    max-height:85vh;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+  .sheet h3{position:sticky;top:-20px;background:#fff;padding-top:2px;z-index:1}
   @keyframes up{from{transform:translateY(100%)}to{transform:translateY(0)}}
   .sheet h3{margin:2px 0 4px;font-size:18px}
   .sheet .sub{color:var(--muted);font-size:13px;margin-bottom:16px}
@@ -129,6 +131,9 @@
   .btn.small{padding:13px}
   .menu-item{display:flex;align-items:center;gap:12px;padding:15px 8px;border-bottom:1px solid var(--line);
     font-size:16px;cursor:pointer;color:#1e293b}
+  .menu-item.acct-row{padding:10px 8px;font-size:15px}
+  .menu-item.acct-row .ic{width:30px;height:30px;border-radius:9px;font-size:15px}
+  .menu-item.acct-row .rm{padding:6px 10px;color:var(--danger);font-size:15px;line-height:1}
   .menu-item:last-child{border-bottom:0}
   .menu-item .ic{width:38px;height:38px;border-radius:11px;background:#eff6ff;display:grid;place-items:center;font-size:18px}
   .menu-item.danger{color:var(--danger)}
@@ -509,17 +514,18 @@ function openMenu(){
   const list = loadAccounts();
   const comptes = list.map((a,i)=>{
     const actif = a.u === uname;
-    return `<div class="menu-item" style="${actif?'background:#eff6ff':''}" onclick="switchAccount(${i})">
+    return `<div class="menu-item acct-row" style="${actif?'background:#eff6ff':''}" onclick="switchAccount(${i})">
       <span class="ic">${actif?'✅':'👤'}</span>
-      <div style="flex:1"><div>${esc(a.u)}${actif?' <span style="font-size:11px;color:var(--brand)">(actif)</span>':''}</div>
-      <div style="font-size:12px;color:var(--muted)">${esc(a.r||'')}</div></div>
-      <span onclick="event.stopPropagation();removeAccount(${i})" style="padding:4px 8px;color:var(--danger);font-size:16px">✕</span>
+      <div style="flex:1;min-width:0">
+        <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(a.u)}${actif?' <span style="font-size:11px;color:var(--brand)">(actif)</span>':''}</div>
+      </div>
+      <span class="rm" onclick="event.stopPropagation();removeAccount(${i})">✕</span>
     </div>`;
   }).join('');
   openSheet(`
     <h3>Menu</h3>
     <div class="sub">Connecté : <b>${esc(uname)}</b> (${esc(role)})</div>
-    ${list.length>1?'<div class="sub" style="margin-top:10px">Mes comptes — touche pour basculer</div>':'<div class="sub" style="margin-top:10px">Mes comptes</div>'}
+    <div class="sub" style="margin:0 0 4px">Mes comptes${list.length>1?' — touche pour basculer':''}</div>
     ${comptes}
     <div class="menu-item" onclick="addAccount()"><span class="ic">➕</span><div><div>Ajouter un compte</div><div style="font-size:12px;color:var(--muted)">Se connecter à un autre compte</div></div></div>
     <div class="menu-item" onclick="showToken()"><span class="ic">🔑</span><div><div>Token super-bot</div><div style="font-size:12px;color:var(--muted)">Jeton du compte ${esc(uname)}</div></div></div>
