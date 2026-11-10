@@ -359,6 +359,55 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.get('/admin', (req, res) => res.sendFile('index.html', { root: path.join(__dirname, 'public') }));
 app.get('/m', (req, res) => res.sendFile('mobile.html', { root: path.join(__dirname, 'public') }));
 
+// ── Page « reçu » : un message réel, en lecture seule, prêt à être capturé ───
+// Sert de justificatif : elle affiche le SMS tel qu'il a été reçu sur le
+// téléphone et enregistré ici — aucun texte n'est reformulé ni ajouté.
+// Authentification par en-tête Authorization ou par ?token= (capture auto).
+app.get('/recu/:id', (req, res) => {
+  const raw = (req.headers.authorization || '').startsWith('Bearer ')
+    ? req.headers.authorization.slice(7)
+    : String(req.query.token || '');
+  let user;
+  try { user = jwt.verify(raw, SECRET_KEY); }
+  catch { return res.status(401).send('<p style="font:16px sans-serif;padding:24px">Lien expiré ou non autorisé.</p>'); }
+
+  const m = db.prepare('SELECT * FROM messages WHERE id = ?').get(String(req.params.id));
+  if (!m) return res.status(404).send('<p style="font:16px sans-serif;padding:24px">Message introuvable.</p>');
+  if (user.role !== 'admin') {
+    const okDev = db.prepare('SELECT 1 FROM device_permissions WHERE user_id=? AND device_id=?').get(user.id, m.device_id);
+    const snd = m.sender_name || m.sender || m.app_name || '';
+    const okSnd = db.prepare('SELECT 1 FROM user_sender_permissions WHERE user_id=? AND sender=?').get(user.id, snd);
+    if (!okDev || !okSnd) return res.status(403).send('<p style="font:16px sans-serif;padding:24px">Accès refusé.</p>');
+  }
+
+  const esc = v => String(v == null ? '' : v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const snd = m.sender_name || m.sender || m.app_name || 'Inconnu';
+  const d = new Date(Number(m.timestamp));
+  const quand = d.toLocaleString('fr-FR', { timeZone: 'Africa/Abidjan', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  res.type('html').send(`<!doctype html><html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Reçu ${esc(snd)}</title><style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{width:680px;background:#eef2f7;padding:0;font-family:"DejaVu Sans","Liberation Sans",system-ui,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+#recu{width:680px;background:#fff;border:1px solid #dbe3ec;border-radius:16px;overflow:hidden}
+.h{background:#2563eb;color:#fff;padding:16px 22px;display:flex;align-items:center;justify-content:space-between}
+.h .a{font-size:18px;font-weight:700}
+.h .b{font-size:12px;opacity:.92;margin-top:2px}
+.h .c{font-size:12px;background:rgba(255,255,255,.18);border-radius:999px;padding:6px 12px;white-space:nowrap}
+.meta{display:flex;align-items:center;gap:10px;padding:16px 22px 0}
+.meta .snd{font-weight:700;font-size:14px;color:#2563eb;background:#eff6ff;padding:5px 11px;border-radius:9px}
+.meta .time{margin-left:auto;font-size:13px;color:#64748b}
+.body{padding:12px 22px 18px;font-size:17px;line-height:1.62;color:#1e293b;white-space:pre-wrap;word-break:break-word}
+.f{background:#f8fafc;border-top:1px solid #e8edf3;padding:11px 22px;font-size:12px;color:#64748b;display:flex;justify-content:space-between;gap:12px}
+</style></head><body><div id="recu">
+<div class="h"><div><div class="a">YapsonPress — message reçu</div>
+<div class="b">Appareil : ${esc(m.device_name || m.device_id)}</div></div>
+<div class="c">SMS archivé</div></div>
+<div class="meta"><span class="snd">${esc(snd)}</span><span class="time">${esc(quand)}</span></div>
+<div class="body">${esc(m.content || '')}</div>
+<div class="f"><span>Message n° ${esc(m.id)}</span><span>Reçu le ${esc(quand)}</span></div>
+</div></body></html>`);
+});
+
 // ── Middlewares Auth ─────────────────────────────────────────────────────────
 function requireDashboardAuth(req, res, next) {
   const auth = req.headers.authorization;
