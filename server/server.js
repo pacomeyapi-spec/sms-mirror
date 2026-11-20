@@ -355,6 +355,11 @@ const io     = new Server(server, {
 
 app.use(cors());
 app.use(express.json({ limit: '25mb' }));
+// press.yapson.net → l'appli mobile directement (l'admin reste sur /admin)
+app.get('/', (req, res, next) => {
+  if ((req.hostname || '').startsWith('press.')) return res.redirect('/m');
+  next();
+});
 app.use(express.static(path.join(__dirname, 'public')));
 app.get('/admin', (req, res) => res.sendFile('index.html', { root: path.join(__dirname, 'public') }));
 app.get('/m', (req, res) => res.sendFile('mobile.html', { root: path.join(__dirname, 'public') }));
